@@ -29,13 +29,15 @@ the title alternates between the picture and the table.
 
 Two yellow cabs drive around near the player (new ones appear when they get
 far away); they keep to the right of the road, the car bounces off them, and
-a cab that is blocked for a second turns around. Flooring it from standstill
+a cab that is blocked honks and after a second turns around; driving away
+from a cab you touch is always allowed (only moves towards it bounce). Cabs
+honk on a nudge and now and then on their own. Flooring it from standstill
 (burnout) and sliding at speed leave black tyre marks.
 
 Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar.
 Sound: the tune on 3 voices; while driving voice 2 is the engine (pitch from
 the speed), during a chase voice 1 is the siren; effects on voice 3 (pow,
-crash, ching, door, and a footstep every 8 frames while walking, only
+crash, ching, door, two cab horns, and a footstep every 8 frames while walking, only
 when no other effect is playing).
 
 ## Build and test

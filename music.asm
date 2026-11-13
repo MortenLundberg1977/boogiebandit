@@ -456,8 +456,17 @@ sfx_end:
     sta sfx_on
     rts
 
-sfx_lo: .byte <sfx_pow, <sfx_crash, <sfx_ching, <sfx_door, <sfx_step
-sfx_hi: .byte >sfx_pow, >sfx_crash, >sfx_ching, >sfx_door, >sfx_step
+sfx_lo: .byte <sfx_pow, <sfx_crash, <sfx_ching, <sfx_door, <sfx_step, <sfx_honk, <sfx_honk2
+sfx_hi: .byte >sfx_pow, >sfx_crash, >sfx_ching, >sfx_door, >sfx_step, >sfx_honk, >sfx_honk2
+// cab horns (sawtooth): one long honk, and a lower "honk-honk"
+sfx_honk:  .byte $00, $c1
+           .fill 10, [$21, $1c]
+           .byte $20, $1c, 0
+sfx_honk2: .byte $00, $c1
+           .fill 5, [$21, $17]
+           .fill 3, [$20, $17]
+           .fill 6, [$21, $17]
+           .byte $20, $17, 0
 sfx_pow:   .byte $09, $00, $81, $40, $81, $30, $81, $24, $81, $1c, $81, $14, $81, $10, $81, $0c, $81, $08, $80, $08, 0
 sfx_crash: .byte $0c, $00, $81, $10, $81, $10, $81, $0e, $81, $0c, $81, $0a, $81, $09, $81, $08, $81, $07, $80, $07, 0
 sfx_ching: .byte $09, $00, $41, $40, $41, $40, $41, $40, $41, $56, $41, $56, $41, $56, $41, $56, $41, $56, $41, $56, $40, $56, 0

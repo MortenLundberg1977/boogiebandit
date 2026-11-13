@@ -54,6 +54,7 @@
 .const SFX_CHING = 2
 .const SFX_DOOR = 3
 .const SFX_STEP = 4
+.const SFX_HONK = 5             // and 6: the second horn
 
 .const NBANKS = bankDoorX.size()
 // police, cabs, jobs (chase.asm)

@@ -76,6 +76,9 @@ nf_next:
     lda car_hit
     beq !+
     jsr car_bounce
+!:  jsr rng_next                    // now and then a cab honks somewhere
+    bne !+                          // (1 in 255 frames, about every 5 s)
+    jsr honk
 !:  lda chase
     beq nf_done
     lda n_type
@@ -119,13 +122,20 @@ npc_one:
     bcs no_respawn
     jsr npc_touch
     bcc no_move
-    lda state                       // in the way: wait (and the car bounces off)
-    cmp #ST_DRIVE
-    bne !+
+    lda state                       // in the way: the cab waits; the car
+    cmp #ST_DRIVE                   // bounces off if it drove into the cab
+    bne nc_wait                     // (driving away is always allowed)
+    jsr cab_closer
+    bcc nc_wait
     lda #1
     sta car_hit
-!:  inc n_wait,x                    // blocked for a second: turn around
+nc_wait:
+    inc n_wait,x
     lda n_wait,x
+    cmp #1                          // honk when it has to stop
+    bne !+
+    jsr honk
+!:  lda n_wait,x                    // blocked for a second: turn around
     cmp #50
     bcc !+
     lda #0
@@ -156,6 +166,8 @@ no_gone:
     sta n_type,x
     rts
 no_move:
+    lda #0                          // not blocked (any more)
+    sta n_wait,x
     // whole pixels this frame: (acc + speed) / 64
     lda n_acc,x
     clc
@@ -586,6 +598,60 @@ cops_off:
     sta chase
     rts
 
+// carry set if the car's move this frame went towards the cab (x = slot;
+// nd/na = player - cab now, both small while they touch)
+cab_closer:
+    lda car_xl                      // before the move: nd - movement
+    sec
+    sbc pcar + 1
+    sta t0
+    lda ndx_l
+    sec
+    sbc t0
+    jsr abs8
+    sta t1
+    lda car_yl
+    sec
+    sbc pcar + 4
+    sta t0
+    lda ndy_l
+    sec
+    sbc t0
+    jsr abs8
+    clc
+    adc t1
+    sta t1
+    lda nax_l                       // closer now than before?
+    clc
+    adc nay_l
+    cmp t1
+    bcc !+
+    clc
+    rts
+!:  sec
+    rts
+abs8:
+    cmp #$80
+    bcc !+
+    eor #$ff
+    adc #0                          // carry is set: + 1
+!:  rts
+
+// a cab horn on the effects voice (one of two), if it is free; x is kept
+honk:
+    lda sfx_on
+    bne !+
+    txa
+    pha
+    lda rng
+    and #1
+    clc
+    adc #SFX_HONK
+    jsr sfx_play
+    pla
+    tax
+!:  rts
+
 // ran into a cab: back to where the car was, bounce off
 car_bounce:
     ldx #5
@@ -598,8 +664,10 @@ car_bounce:
     bne !+
     lda t0
     cmp #$60
-    bcc cb_soft
-!:  lda #SFX_CRASH
+    bcs !+
+    jsr honk                        // a nudge: the cabbie honks
+    jmp cb_soft
+!:  lda #SFX_CRASH                  // a real bump
     jsr sfx_play
 cb_soft:
     lda spd_h

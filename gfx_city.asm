@@ -271,8 +271,10 @@
             .for (var x = bx0; x < bx0 + bw - 2; x = x + 3) {
                 .eval mfill(x, by0, 1, 3, STALL)
                 .eval mfill(x, by0 + bh - 3, 1, 3, STALL)
-                .if (rnd(4) != 0) .eval mstamp(x + 1, by0, cabV)
-                .if (rnd(4) != 0) .eval mstamp(x + 1, by0 + bh - 3, cabV)
+                // half the top stalls and a quarter of the bottom ones taken:
+                // room to drive in (same random calls, the city stays the same)
+                .if (rnd(4) >= 2) .eval mstamp(x + 1, by0, cabV)
+                .if (rnd(4) == 0) .eval mstamp(x + 1, by0 + bh - 3, cabV)
             }
         } else {
             .eval buildings(bx0, by0, bw, bh)
