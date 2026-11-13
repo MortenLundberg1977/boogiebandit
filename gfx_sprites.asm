@@ -235,7 +235,43 @@
     }
     .eval addSprite(out)
 }
-.errorif sprLo.size() > 32 * 64, "low sprite block is full"
+
+// ---------------------------------------------------------------- added later
+// 56, 57: HUD boxes for the job timer and lives/wanted level
+.eval addSprite(hudSprite("TIM"))
+.eval addSprite(hudSprite("   "))
+// 58-61: the police car, black and white with a light bar (sprite colour,
+// flashing red/blue), nose north, east, south, west
+.var copArt = List().add(
+    "..wwwwwwww..",
+    ".wwwwwwwwww.",
+    "kwwwwwwwwwwk",
+    "kwwwwwwwwwwk",
+    "kwwwwwwwwwwk",
+    ".wwwwwwwwww.",
+    ".wkkkkkkkkw.",
+    ".wkkkkkkkkw.",
+    ".kwwwwwwwwk.",
+    ".kcccccccck.",
+    ".kcccccccck.",
+    ".kwwwwwwwwk.",
+    ".wkkkkkkkkw.",
+    ".wwwwwwwwww.",
+    "kkkkkkkkkkkk",
+    "kkkkkkkkkkkk",
+    "kwwwwwwwwwwk",
+    ".wwwwwwwwww.",
+    ".wwwwwwwwww.",
+    "..kwwwwwwk..")
+.for (var d = 0; d < 4; d++) .eval addSprite(rotSprite(copArt, d * 90))
+// 62: a 4 x 4 dot, 63: an 8 x 8 ring (hi-res, for the city map)
+.var dotSpr = List()
+.for (var y = 0; y < 21; y++) .eval dotSpr.add((y < 4) ? $f0 : 0, 0, 0)
+.eval addSprite(dotSpr)
+.var ringSpr = List()
+.for (var y = 0; y < 21; y++) .eval ringSpr.add((y == 0 || y == 7) ? $ff : ((y < 7) ? $81 : 0), 0, 0)
+.eval addSprite(ringSpr)
+.errorif sprLo.size() != 32 * 64, "low sprite block must be 32 sprites: " + sprLo.size() / 64
 
 // sprite numbers (pointer = $c800 block 32+n, $d800 block 96+n)
 .const SP_FPS = 32
@@ -246,6 +282,11 @@
 .const SP_PRESS = 53
 .const SP_CAR = 96
 .const SP_ARROW = 112
+.const SP_TIME = 56
+.const SP_LIVES = 57
+.const SP_COP = 58              // + direction 0-3 (N E S W)
+.const SP_DOT = 62
+.const SP_RING = 63
 
 // HUD digit rows: box pixel then three digit pixels (white on black)
 .var digitRows = List()
@@ -256,3 +297,17 @@
         .eval digitRows.add(v)
     }
 }
+// 10 = empty cell, 11 = a life (heart, white), 12 = wanted star
+// (label colour), 13 = empty label cell
+.function hudCell(rows, code) {
+    .for (var r = 0; r < 5; r++) {
+        .var v = 1
+        .for (var p = 0; p < 3; p++) .eval v = v * 4 + ((rows.get(r).charAt(p) == "#") ? code : 1)
+        .eval digitRows.add(v)
+    }
+    .return 0
+}
+.eval hudCell(List().add("...", "...", "...", "...", "..."), 3)
+.eval hudCell(List().add("#.#", "###", "###", ".#.", "..."), 3)
+.eval hudCell(List().add("#.#", ".#.", "###", ".#.", "#.#"), 2)
+.eval hudCell(List().add("...", "...", "...", "...", "..."), 2)

@@ -286,8 +286,10 @@
     .var ax = AVX.get(k)
     .for (var j = 0; j < STY.size() - 1; j++) {
         .var ys = STY.get(j) + 6
-        .if (rnd(3) != 0) .eval mstamp(ax, ys + rnd(4), cabV)
-        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + rnd(4), cabV)
+        // never side by side: left curb in the upper half of the block,
+        // right curb in the lower half, so a car always fits between them
+        .if (rnd(3) != 0) .eval mstamp(ax, ys + rnd(2), cabV)
+        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + 5 + rnd(2), cabV)
     }
 }
 .for (var n = 0; n < 24; n++) {
@@ -313,7 +315,8 @@
 .var B_BR = one(rows8("yyyb", "yyyb", "yyyb", "yyyb", "yyyb", "yyb.", "bb..", "...."), CL_FREE)
 
 .var bubbleWords = List().add("KAPOW!", "BLAM!", "ZOWIE!", "WHAM!", "BOOM!", "POW!", "BANG!", "ZAP!",
-                              "CRASH!", "BAM!", "SWAG!", "YOINK!", "LOOT!", "CASH!", "KABOOM!", "KACHING!")
+                              "CRASH!", "BAM!", "SWAG!", "YOINK!", "LOOT!", "CASH!", "KABOOM!", "KACHING!",
+                              "BUSTED!", "ESCAPED!", "TOO SLOW!")   // 16-18: messages
 .var glyphOrder = ""
 .for (var w = 0; w < bubbleWords.size(); w++) {
     .var s = bubbleWords.get(w)
@@ -381,3 +384,15 @@
     .eval wheelRX.add(round(-dx * 7 + px * 4))
     .eval wheelRY.add(round(-dy * 7 + py * 4))
 }
+
+// ---------------------------------------------------------------- city map colours
+// per character: 0 black (the wall around the city), 1 street level (roads,
+// sidewalks, parked cabs), 2 building. Banks are painted in at run time.
+.var mapCode = List()
+.for (var i = 0; i < 256; i++) {
+    .var v = 0
+    .if (i < CITY_CHARS) .eval v = ((charClass.get(i) & 1) != 0) ? 2 : 1
+    .eval mapCode.add(v)
+}
+.eval mapCode.set(WALLCH, 0)
+.for (var y = 0; y < cabV.size(); y++) .for (var x = 0; x < cabV.get(0).size(); x++) .eval mapCode.set(cabV.get(y).get(x), 1)

@@ -178,8 +178,13 @@ music_init:
 // silence all voices (music off)
 music_mute:
     lda #0
+    ldx v1_own
+    bne !+
     sta $d404
+!:  ldx v2_own
+    bne !+
     sta $d40b
+!:
     lda sfx_on
     bne !+
     lda #0
@@ -240,11 +245,23 @@ m_fx:
     jsr m_effects
     dex
     bpl m_voice
-    ldx #13                         // copy the shadow to the SID
-!:  lda sid_sh,x
+    lda v1_own                      // copy the shadow to the SID, except
+    bne !+                          // voices the game took (siren, engine)
+    ldx #6
+m_copy1:
+    lda sid_sh,x
     sta $d400,x
     dex
-    bpl !-
+    bpl m_copy1
+!:  lda v2_own
+    bne !+
+    ldx #6
+m_copy2:
+    lda sid_sh + 7,x
+    sta $d407,x
+    dex
+    bpl m_copy2
+!:
     lda sfx_on
     bne !+
     ldx #6

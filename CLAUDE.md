@@ -8,7 +8,7 @@ from an SD card. Sister projects: `..\kramster`, `..\drivinggame` (Soul Drive).
 
 Owner's wishes: original name, art and music (nothing from existing games or
 cartoons), smooth 50 fps on a real PAL C64, no ROM font anywhere (all text uses
-the game's own fonts in `gfx_lib.asm`).
+the game's own fonts in `gfx_lib.asm`), black tyre marks.
 
 ## Gameplay
 
@@ -16,78 +16,125 @@ Drive the red sedan through a scrolling 128 x 128 character city to the bank
 the arrow (lower left) points at; a green marker bounces over its door. Fire
 (when nearly stopped) gets out; walk into the door: a 10 second robbery with
 comic bubbles (KAPOW!, BLAM!, ...), five per robbery, random word and colour.
-The bandit comes out with a loot bag ($1,000-$4,700 added to the score), the
-next bank is chosen (target + 3 of 8). Fire next to the car gets back in.
-Flooring it from standstill (burnout) and sliding at speed leave tyre marks.
-Keys: M music on/off, D raster time bar in the border.
+The bandit comes out with a loot bag ($1,000-$4,700 plus 10 x the seconds left
+on the job timer), the next bank is chosen (target + 3 of 8), one more wanted
+star lights up (at most 3) and that many police cars come after him. Fire next
+to the car gets back in. Lose every police car (they give up 2-3 screens
+away): ESCAPED!, $500. Touched by one (car to car, or within 32 pixels on
+foot): BUSTED!, a life gone, the stars reset. The job timer starts at 60
+seconds and gets 3 seconds shorter per job (at least 30); run out: TOO SLOW!,
+a life gone, next bank. Three lives (hearts in the HUD); then game over, name
+entry if the score makes the top 5 (kept until the C64 is switched off), and
+the title alternates between the picture and the table.
+
+Two yellow cabs drive around near the player (new ones appear when they get
+far away); they keep to the right of the road, the car bounces off them, and
+a cab that is blocked for a second turns around. Flooring it from standstill
+(burnout) and sliding at speed leave black tyre marks.
+
+Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar.
+Sound: the tune on 3 voices; while driving voice 2 is the engine (pitch from
+the speed), during a chase voice 1 is the siren; effects on voice 3.
 
 ## Build and test
 
 - `build.bat [pull [branch]] [run]` → `build\boogie.prg`, `build\boogiebandit.d64`
   (file `boogie`, lowercase: uppercase becomes shifted PETSCII). One file, loads
   at $0801, `LOAD"BOOGIE",8` + `RUN` on a real C64.
-- `powershell -File tools\vice.ps1 build\boogie.prg "wait 4; poke 1d 10; wait 0.3; poke 1d 00; wait 2; shot build\a.png; peek 17 1; quit"`
+- `powershell -ExecutionPolicy Bypass -File tools\vice.ps1 build\boogie.prg "wait 4; poke 1d 10; wait 0.3; poke 1d 00; wait 2; shot build\a.png; peek 17 1; quit"`
   drives VICE through the remote monitor. Commands: `wait`, `shot`, `poke`,
-  `peek`, `mon`, `raw`, `quit`. `tools\zoom.ps1 in.png out.png x y w h [scale]`
-  enlarges part of a screenshot. Always look at the screenshots.
+  `peek`, `mon`, `raw`, `quit`; `-Extra "-sounddev wav -soundarg build\x.wav"`
+  records the sound. `tools\zoom.ps1 in.png out.png x y w h [scale]` enlarges
+  part of a screenshot. Always look at the screenshots.
 - Test hooks (zero page, check `build\boogie.sym` after changes):
   `joy_ovr` $1d (OR'ed into joystick 2: 1 up 2 down 4 left 8 right $10 fire),
+  `key_ovr` $ba (keys: $20 SPACE, $10 M, $04 D; poke, then 00 again),
   `fps_val` $17 (frames shown in the last 50 raster frames, $32 = 50),
   `perf` $84 / `perf_max` $85 (main loop time in raster lines / 2 counted from
-  the IRQ at line 250; 156 = a whole frame; keep the worst case below ~135),
-  `state` $21 (0 drive, 1 walk, 2 robbery), `target` $4c, `score` $57 (BCD),
+  the IRQ at line 250; 156 = a whole frame), `n_cross` $b8 / `n_hold` $b9
+  (character crossings / the ones the scroll did not predict),
+  `state` $21 (0 drive, 1 walk, 2 robbery, 3 message), `target` $4c,
+  `score` $57 (BCD, lowest byte first), `lives` $91, `wanted` $92, `chase` $93,
+  `job_time` $94 (BCD seconds), `n_type` $3a1 (5 slots: 1 police, 2 cab; then
+  x low/high, y low/high, direction, 5 bytes each),
   `car_xl`/`car_yl` $24/$27 (+1 high byte), `hdg`/`mang` $2a/$2b, `debug_bar` $1f.
-  Teleport next to bank 0: `poke 24 00 01; poke 27 c4 00; poke 2a c0 c0`.
+  Teleport next to bank 0: `poke 24 00 01; poke 27 c4 00; poke 2a c0 c0`, then
+  fire, `poke 1d 01` for 1.2 s walks into the door. Poke `wanted` to 2 during
+  the robbery for a three-car chase.
 
 ## Files
 
 | File | What |
 |---|---|
-| `boogie.asm` | main: memory map, init, raster IRQ, title, game loop, car physics, walking, robbery, scrolling, sprites, HUD, tables |
+| `boogie.asm` | main: memory map, init, raster IRQs, title, game loop, car physics, walking, robbery, scrolling, sprites, HUD, tables |
+| `chase.asm` | police and cabs (road-grid driving), arrests, escapes, job timer, lives, message bubbles, engine and siren |
+| `screens.asm` | bitmap screens: text in the 4x7 font, title pages, high score table and name entry, the city map |
 | `music.asm` | SID player (register shadow, patterns as text) + the tune "Getaway Groove" + sound effects on voice 3 |
 | `gfx_lib.asm` | build-time helpers: random, 4x7 font, 3x5 HUD font, RLE packer |
-| `gfx_city.asm` | build-time: multicolor charset, the city map, banks, comic bubble characters, skid-mark tables |
-| `gfx_sprites.asm` | build-time: car (16 rotations), arrow dial (16), bandit (4 dirs x 2 steps, with/without bag), marker, HUD boxes, title text |
+| `gfx_city.asm` | build-time: multicolor charset, the city map, banks, comic bubble characters, map colours, skid-mark tables |
+| `gfx_sprites.asm` | build-time: car (16 rotations), arrow dial (16), bandit (4 dirs x 2 steps, with/without bag), marker, HUD boxes, title text, police car (4), map dots |
 | `gfx_intro.asm` | build-time: the title picture (multicolor bitmap) |
 
 Everything graphical is generated by KickAssembler script at build time; there
 are no binary assets. The city is drawn from ASCII-art "stamps" (4 pixels per
-character, `.` asphalt, `w` light grey, `b` brown, `y` yellow) that are cut
+character, `.` asphalt, `w` light grey, `b` black, `y` yellow) that are cut
 into characters and de-duplicated.
 
 ## Memory map
 
-- `$0200-$02ff` skid-mark ring buffer (128 map addresses), `$0300-$03ff` arrays.
-- `$0801-$77xx` program + data (the build prints where it ends; must stay below $8000).
+- `$0200-$02ff` skid-mark ring buffer (128 map addresses), `$0300-$03ff` arrays
+  (music, sprite shadows, police/cab slots).
+- `$0801-$74xx` program + data (must stay below $8000; ~2.9 KB free). After it
+  the packed charset and sprites (only needed at start-up, may reach past
+  $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
-  marker, title text; written at run time), `$d000` charset and `$d800` sprites
-  96-127 (car, arrow) under the I/O area (copied at start with `$01=$34`),
-  `$e000` title bitmap.
+  marker, title text, police, map dots; HUD digits written at run time),
+  `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
+  `$e000` bitmap for the title pages, game over and the city map (colours in
+  screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
   packed map (`map_rle`, free after unpacking; must stay ≥ 6001 bytes, an
-  assert checks this), B→A at `$e000` once the title is gone. Returning to the
-  title screen would need the B→A routine regenerated after it.
+  assert checks this), B→A at `$e000`, generated again every time the city
+  comes back from a bitmap screen (`gen_shift_ba`).
 - KERNAL and BASIC are banked out (`$01=$35`), IRQ/NMI vectors at `$fffe/$fffa`.
-- Zero page `$02-$9x` is the game's (allocated with `zalloc`).
+- Zero page `$02-$bx` is the game's (allocated with `zalloc`).
 
 ## How a frame works
 
 The raster IRQ at line 250 applies the frame the main loop prepared
-(`frame_ready`): screen buffer (`$d018`), fine scroll, sprite positions and
-pointers (shadows), counts shown frames for the fps meter (exact: frames per
-50 raster frames), then plays music and effects. The main loop waits for that,
-then: input, state (drive/walk/robbery), camera (eases towards the car with a
-look-ahead), `scroll_prepare`. When the camera crosses a character boundary it
-shifts the shown screen into the hidden one by one character in any of 8
-directions (~8,250 cycles, generated code) and draws the new edge column/row
-from the map. Colour RAM is one value for the whole city (multicolor, yellow),
-so it never has to scroll; the palette is `$d021` grey asphalt, `$d022` light
-grey, `$d023` brown, colour RAM yellow. Comic bubbles are drawn into the shown
-screen with their own colour RAM while the camera stands still, and the city
-is restored from the map afterwards.
+(`frame_ready`): screen buffer (`$d018`), fine scroll, sprites 4-6 and copies
+of the shadows for 0-3 and 7. It puts the HUD row at the top (sprites 0-3 and
+7: fps, timer, hearts/stars, score), counts shown frames for the fps meter,
+plays music and effects and sets a second IRQ at line 80 (`irq_split`), which
+turns sprites 0-3 and 7 into police cars, cabs and the arrow. So those can't
+be shown above line 88 (they are hidden there).
 
-Measured worst case while driving: about 80% of a frame (`perf_max` ≈ $7c-$80).
+The main loop waits for the frame to be taken, then: input, state
+(drive/walk/robbery/message), police and cabs, the job timer, camera (eases
+towards the car with a look-ahead), `scroll_prepare`, sprites, HUD, engine and
+siren. When the camera crosses a character boundary it shifts the shown screen
+into the hidden one by one character in any of 8 directions (generated code,
+~8,250 cycles in all) and draws the new edge from the map. The shift is done
+in two halves on two frames: `predict` guesses from the camera's movement
+that the next frame will cross and shifts the first half early; if a crossing
+comes unpredicted, the camera waits one frame at the boundary while the first
+half is shifted (`n_hold`). Skid marks drawn meanwhile go into both buffers.
+Heavy frames (`scrolled`) skip the HUD redraw and the engine sound update.
+
+Colour RAM is one value for the whole city (multicolor, yellow), so it never
+has to scroll; the palette is `$d021` grey asphalt, `$d022` light grey,
+`$d023` black (roofs, tyre marks), colour RAM yellow. Comic bubbles are drawn
+into the shown screen with their own colour RAM while the camera stands still,
+and the city is restored from the map afterwards.
+
+Police and cabs drive on the centre lines of the road grid (avenue centres
+x = 128 + 256 k, street centres y = 64 + 128 j) and decide at the crossings:
+cabs at random, police towards the player (longer distance first) and they
+turn around when the player is behind them.
+
+Measured worst case (3 police cars, 2 cabs, skid marks, hard turning):
+`perf_max` ≈ $8a = 138 of 156; plain driving ≈ $6b.
 
 ## Conventions
 
@@ -97,6 +144,7 @@ Measured worst case while driving: about 80% of a frame (`perf_max` ≈ $7c-$80)
 
 ## Ideas on the list
 
-Police cars that chase after a robbery (sprite multiplexing), traffic (yellow
-cabs as sprites), a wanted level, a timer per robbery, more banks and districts
-(park, river), engine sound, high scores, a minimap.
+More banks and a second district; police roadblocks; a minimap in the HUD
+(the full map is on SPACE); saving the high scores to disk; a park or river
+would need green/blue, which the one-colour-RAM city can't show (it would need
+colour RAM scrolling, ~8,000 more cycles a scroll).

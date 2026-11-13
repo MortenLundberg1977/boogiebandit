@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------- constants
 .const ROAD_COL = 12            // $d021 asphalt (grey)
 .const WALK_COL = 15            // $d022 sidewalks (light grey)
-.const ROOF_COL = 9             // $d023 roofs, marks (brown)
+.const ROOF_COL = 0             // $d023 roofs, tyre marks (black)
 .const HI_COL = 7               // color RAM: yellow cabs, lines, windows
 .const COLRAM = $08 | HI_COL    // multicolor + yellow for every cell
 
@@ -40,6 +40,7 @@
 .const ST_DRIVE = 0
 .const ST_WALK = 1
 .const ST_ROB = 2
+.const ST_MSG = 3                // a message bubble (BUSTED! ...), the game waits
 
 .const MAXSPD = $0300           // 3.0 pixels a frame
 .const REVMAX = $0100
@@ -54,6 +55,20 @@
 .const SFX_DOOR = 3
 
 .const NBANKS = bankDoorX.size()
+// police, cabs, jobs (chase.asm)
+.const NNPC = 5
+.const NT_COP = 1
+.const NT_CAB = 2
+.const CAB_SPEED = 96            // 1/64 pixels a frame: 1.5
+.const COP_SPEED = 136           // 2.1, + 12 for each wanted star
+.const MSG_FRAMES = 100
+.const W_BUSTED = 16             // message words (gfx_city.asm)
+.const W_ESCAPED = 17
+.const W_SLOW = 18
+.const SPLIT_LINE = 80           // the HUD sprites end at line 76
+.const SPLIT_MIN_Y = 88          // shared sprites only below the HUD row
+.const JOB_TIME = $60            // seconds (BCD) for the first job
+.const JOB_MIN = $30
 .const START_X = 81 * 8
 .const START_Y = 62 * 8
 
@@ -189,7 +204,72 @@
 .label bc1 = zalloc(1)
 .label br0 = zalloc(1)
 .label br1 = zalloc(1)
+.label in_game = zalloc(1)       // the IRQ runs the HUD / playfield sprite split
+.label lv_msb = zalloc(1)        // sprite registers the IRQ hands to the VIC
+.label lv_en = zalloc(1)
+.label pstate = zalloc(1)        // state, or the one before a message
+.label key_map = zalloc(1)       // SPACE was pressed: the city map
+.label lives = zalloc(1)
+.label wanted = zalloc(1)        // stars = police cars after the next job
+.label chase = zalloc(1)
+.label job_time = zalloc(1)      // BCD seconds left for this job
+.label job_tick = zalloc(1)
+.label job_start = zalloc(1)
+.label hud_dirty = zalloc(1)     // 1 = timer, 2 = lives / stars
+.label msg_t = zalloc(1)
+.label msg_next = zalloc(1)
+.label msg_prev = zalloc(1)
+.label v1_own = zalloc(1)        // the game has taken SID voice 1 (siren)
+.label v2_own = zalloc(1)        // ... voice 2 (engine)
+.label ni = zalloc(1)
+.label nsteps = zalloc(1)
+.label nspd = zalloc(1)
+.label vmask = zalloc(1)
+.label ndx_l = zalloc(1)
+.label ndx_h = zalloc(1)
+.label ndy_l = zalloc(1)
+.label ndy_h = zalloc(1)
+.label nax_l = zalloc(1)
+.label nax_h = zalloc(1)
+.label nay_l = zalloc(1)
+.label nay_h = zalloc(1)
+.label tgt_xl = zalloc(1)
+.label tgt_xh = zalloc(1)
+.label tgt_yl = zalloc(1)
+.label tgt_yh = zalloc(1)
+.label car_hit = zalloc(1)
+.label busted = zalloc(1)
+.label reach = zalloc(1)        // how close the police must get
+.label scrolled = zalloc(1)     // this frame shifted the screen
+.label pending = zalloc(1)      // the first half of the next shift is done
+.label pend_dx = zalloc(1)
+.label pend_dy = zalloc(1)
+.label last_xl = zalloc(1)
+.label last_yl = zalloc(1)
+.label sc_c = zalloc(1)
+.label sc_r = zalloc(1)
+.label n_cross = zalloc(1)      // test hooks: character crossings ...
+.label n_hold = zalloc(1)       // ... and how many were not predicted
+.label key_ovr = zalloc(1)
+.label pcar = zalloc(6)          // car_xf..car_yh before this frame's move
+.label title_t = zalloc(2)
+.label page = zalloc(1)
+.label bm_col = zalloc(1)
+.label tx_c = zalloc(1)
+.label tx_r = zalloc(1)
+.label tx_i = zalloc(1)
+.label pb_seen = zalloc(1)
+.label bcd = zalloc(3)
+.label hs_i = zalloc(1)
+.label hs_pos = zalloc(1)
+.label hs_cur = zalloc(1)
+.label hs_rep = zalloc(1)
+.label mb_x = zalloc(1)
+.label mb_y = zalloc(1)
+.label mb_w = zalloc(1)
+.label mb_h = zalloc(1)
 .errorif zpNext > $100, "zero page full"
+.errorif car_yh - car_xf != 5, "car_xf..car_yh must be in a row (save_car)"
 
 // arrays in $0200-$03ff
 .label ring_lo = $0200
@@ -217,6 +297,20 @@
 .label sh_y = balloc(8)
 .label sh_ptr = balloc(8)
 .label tbuf = balloc(40)
+.label sh_col = balloc(8)
+.label lv_x = balloc(8)
+.label lv_y = balloc(8)
+.label lv_ptr = balloc(8)
+.label lv_col = balloc(8)
+.label n_type = balloc(5)         // police and cabs (chase.asm)
+.label n_xl = balloc(5)
+.label n_xh = balloc(5)
+.label n_yl = balloc(5)
+.label n_yh = balloc(5)
+.label n_dir = balloc(5)
+.label n_acc = balloc(5)
+.label n_spd = balloc(5)
+.label n_wait = balloc(5)
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -267,41 +361,46 @@ start:
     lda #$a5
     sta rng
 
-    // charset and car/arrow sprites go under the I/O area
+    // no skid marks yet
+    lda #0
+    ldx #127
+!:  sta ring_hi,x
+    dex
+    bpl !-
+
+    // charset and car/arrow sprites go under the I/O area (packed, at the
+    // end of the program: the map is unpacked over them afterwards)
     lda #$34
     sta $01
-    lda #<charset_src
+    lda #<charset_rle
     sta zsrc
-    lda #>charset_src
+    lda #>charset_rle
     sta zsrc + 1
     lda #<CHARSET
     sta zdst
     lda #>CHARSET
     sta zdst + 1
-    ldx #8
-    jsr copy_pages
-    lda #<sprhi_src
+    jsr unpack
+    lda #<sprhi_rle
     sta zsrc
-    lda #>sprhi_src
+    lda #>sprhi_rle
     sta zsrc + 1
     lda #<SPRHI
     sta zdst
     lda #>SPRHI
     sta zdst + 1
-    ldx #8
-    jsr copy_pages
+    jsr unpack
     lda #$35
     sta $01
-    lda #<sprlo_src
+    lda #<sprlo_rle
     sta zsrc
-    lda #>sprlo_src
+    lda #>sprlo_rle
     sta zsrc + 1
     lda #<SPRLO
     sta zdst
     lda #>SPRLO
     sta zdst + 1
-    ldx #8
-    jsr copy_pages
+    jsr unpack
 
     // the city map
     lda #<map_rle
@@ -413,34 +512,123 @@ irq:
     lda #$ff
     sta $d019
     lda frame_ready
-    beq irq_noframe
-    lda sh_d018
+    bne !+
+    jmp irq_noframe
+!:  lda sh_d018
     sta $d018
     lda sh_d016
     sta $d016
     lda sh_d011
     sta $d011
-    ldx #7
-!:  lda sh_ptr,x
-    sta SCR_A + $3f8,x
-    sta SCR_B + $3f8,x
-    txa
-    asl
-    tay
-    lda sh_x,x
-    sta $d000,y
-    lda sh_y,x
-    sta $d001,y
-    dex
-    bpl !-
+    lda in_game
+    bne !+
+    jmp irq_taken
+!:
+    // sprites 4-6 go to the VIC now; 0-3 and 7 wait for the split below
+    // the HUD row (irq_split)
+.for (var s = 0; s < 8; s++) {
+    .if (s < 4 || s == 7) {
+    lda sh_x + s
+    sta lv_x + s
+    lda sh_y + s
+    sta lv_y + s
+    lda sh_ptr + s
+    sta lv_ptr + s
+    }
+    .if (s < 3 || s == 7) {
+    lda sh_col + s
+    sta lv_col + s
+    }
+}
     lda sh_msb
-    sta $d010
+    sta lv_msb
     lda sh_en
-    sta $d015
+    sta lv_en
+    lda sh_x + 4
+    sta $d008
+    lda sh_y + 4
+    sta $d009
+    lda sh_x + 5
+    sta $d00a
+    lda sh_y + 5
+    sta $d00b
+    lda sh_x + 6
+    sta $d00c
+    lda sh_y + 6
+    sta $d00d
+    lda sh_ptr + 4
+    sta SCR_A + $3fc
+    sta SCR_B + $3fc
+    lda sh_ptr + 5
+    sta SCR_A + $3fd
+    sta SCR_B + $3fd
+    lda sh_ptr + 6
+    sta SCR_A + $3fe
+    sta SCR_B + $3fe
+    lda sh_col + 4
+    sta $d02b
+irq_taken:
     lda #0
     sta frame_ready
     inc shown
 irq_noframe:
+    lda in_game
+    bne !+
+    jmp irq_common
+!:
+    // the HUD row at the top: fps, timer, lives / stars, score
+    lda #33
+    sta $d000
+    lda #<278
+    sta $d002
+    lda #<302
+    sta $d004
+    lda #61
+    sta $d006
+    lda #250
+    sta $d00e
+    lda #56
+    sta $d001
+    sta $d003
+    sta $d005
+    sta $d007
+    sta $d00f
+    lda #SP_FPS
+    sta SCR_A + $3f8
+    sta SCR_B + $3f8
+    lda #SP_SC1
+    sta SCR_A + $3f9
+    sta SCR_B + $3f9
+    lda #SP_SC2
+    sta SCR_A + $3fa
+    sta SCR_B + $3fa
+    lda #SP_TIME
+    sta SCR_A + $3fb
+    sta SCR_B + $3fb
+    lda #SP_LIVES
+    sta SCR_A + $3ff
+    sta SCR_B + $3ff
+    lda #7
+    sta $d027
+    sta $d028
+    sta $d029
+    sta $d02a
+    sta $d02e
+    lda lv_msb
+    and #%01110000
+    ora #%00000110
+    sta $d010
+    lda lv_en
+    and #%01110000
+    ora #%10001111
+    sta $d015
+    lda #SPLIT_LINE
+    sta $d012
+    lda #<irq_split
+    sta $fffe
+    lda #>irq_split
+    sta $ffff
+irq_common:
     inc vbl
     dec fps_tick
     bne !+
@@ -458,6 +646,73 @@ irq_noframe:
     tay
     pla
     tax
+    pla
+    rti
+
+// Below the HUD row (line 80): sprites 0-3 and 7 become police cars, cabs
+// and the arrow. Y positions first: a sprite may start at line 88.
+irq_split:
+    pha
+    lda #$ff
+    sta $d019
+    lda in_game
+    bne !+
+    jmp is_done
+!:
+    lda lv_y + 0
+    sta $d001
+    lda lv_y + 1
+    sta $d003
+    lda lv_y + 2
+    sta $d005
+    lda lv_y + 3
+    sta $d007
+    lda lv_y + 7
+    sta $d00f
+    lda lv_x + 0
+    sta $d000
+    lda lv_x + 1
+    sta $d002
+    lda lv_x + 2
+    sta $d004
+    lda lv_x + 3
+    sta $d006
+    lda lv_x + 7
+    sta $d00e
+    lda lv_msb
+    sta $d010
+    lda lv_ptr + 0
+    sta SCR_A + $3f8
+    sta SCR_B + $3f8
+    lda lv_ptr + 1
+    sta SCR_A + $3f9
+    sta SCR_B + $3f9
+    lda lv_ptr + 2
+    sta SCR_A + $3fa
+    sta SCR_B + $3fa
+    lda lv_ptr + 3
+    sta SCR_A + $3fb
+    sta SCR_B + $3fb
+    lda lv_ptr + 7
+    sta SCR_A + $3ff
+    sta SCR_B + $3ff
+    lda lv_col + 0
+    sta $d027
+    lda lv_col + 1
+    sta $d028
+    lda lv_col + 2
+    sta $d029
+    lda lv_col + 7
+    sta $d02e
+    lda lv_en
+    sta $d015
+is_done:
+    lda #IRQ_LINE
+    sta $d012
+    lda #<irq
+    sta $fffe
+    lda #>irq
+    sta $ffff
     pla
     rti
 
@@ -490,14 +745,24 @@ read_input:
     and #$04
     ora t0
     sta t0
-    lda #$7f
+    lda #$7f                        // SPACE = the city map
     sta $dc00
+    lda $dc01
+    eor #$ff
+    and #$10
+    asl
+    ora t0
+    ora key_ovr                     // test hook: $20 SPACE, $10 M, $04 D
+    sta t0
     lda keys_prev
     eor #$ff
     and t0
     tax
     lda t0
     sta keys_prev
+    txa
+    and #$20
+    sta key_map
     txa
     and #$10
     beq !+
@@ -526,44 +791,26 @@ rng_next:
 // title screen
 // =====================================================================
 title:
+    lda #0                          // the picture first
+    jmp title_go
+// after a game: game over / name entry, then the table first
+game_over:
+    ldx #$ff
+    txs
     lda #0
+    sta in_game
+    sta frame_ready
     sta $d015
-    lda #$0b
-    sta $d011
-    lda #<intro_bitmap
-    sta zsrc
-    lda #>intro_bitmap
-    sta zsrc + 1
-    lda #<BITMAP
-    sta zdst
-    lda #>BITMAP
-    sta zdst + 1
-    jsr unpack
-    lda #<intro_screen
-    sta zsrc
-    lda #>intro_screen
-    sta zsrc + 1
-    lda #<SCR_A
-    sta zdst
-    lda #>SCR_A
-    sta zdst + 1
-    jsr unpack
-    lda #<intro_color
-    sta zsrc
-    lda #>intro_color
-    sta zsrc + 1
-    lda #<$d800
-    sta zdst
-    lda #>$d800
-    sta zdst + 1
-    jsr unpack
+    jsr sound_off
+    jsr wait_frame
+    jsr hiscore_entry
+    lda #1
+title_go:
+    sta page
     lda #0
-    sta $d020
-    sta $d021
-    lda #$08
-    sta $d018
-    lda #$18
-    sta $d016
+    sta in_game
+    sta $d015
+    jsr show_page
     // sprites: 0-2 "PRESS FIRE" (hi-res, expanded), 3 a yellow cab driving by
     lda #SP_PRESS
     sta SCR_A + $3f8
@@ -604,8 +851,6 @@ title:
     sta $d010
     sta title_x
     sta title_x + 1
-    lda #$3b
-    sta $d011
 title_release:
     jsr read_input
     lda joy
@@ -644,11 +889,33 @@ title_loop:
     lda #%00000111
 !:  ora #%00001000
     sta $d015
-    jsr read_input
+    // picture 10 s, top bandits 5 s
+    inc title_t
+    bne !+
+    inc title_t + 1
+!:  ldx page
+    lda title_t + 1
+    cmp page_len,x
+    bcc !+
+    lda page
+    eor #1
+    sta page
+    jsr show_page
+!:  jsr read_input
     lda joy_new
     and #$10
     beq title_loop
     jmp game_start
+
+page_len: .byte 2, 1
+show_page:
+    lda #0
+    sta title_t
+    sta title_t + 1
+    lda page
+    bne !+
+    jmp show_picture
+!:  jmp show_scores
 
 // =====================================================================
 // game
@@ -658,58 +925,37 @@ game_start:
     sta $d015
     lda #$0b
     sta $d011
-    // the screen shift B->A goes where the title picture was
-    lda #<shift_ba
-    sta zdst
-    lda #>shift_ba
-    sta zdst + 1
-    lda #<SCR_B
-    sta t0
-    lda #>SCR_B
-    sta t1
-    lda #<SCR_A
-    sta t2
-    lda #>SCR_A
-    sta t3
-    jsr gen_shift
+    jsr gen_shift_ba
     lda #0
     sta $d017
     sta $d01d
     sta $d01b
-    sta $d020
     sta $d025
     lda #$ff
     sta $d01c
     lda #1
     sta $d026
-    lda #ROAD_COL
-    sta $d021
-    lda #WALK_COL
-    sta $d022
-    lda #ROOF_COL
-    sta $d023
-    // sprite colours: HUD labels yellow, arrow yellow, bandit orange,
-    // car red, marker green
-    lda #7
-    sta $d027
-    sta $d028
-    sta $d029
-    sta $d02a
-    lda #8
-    sta $d02b
-    lda #2
+    lda #2                          // the getaway car: red, the marker green
     sta $d02c
     lda #5
     sta $d02d
-    // one color RAM value for the whole city
-    ldx #0
-    lda #COLRAM
-!:  sta $d800,x
-    sta $d900,x
-    sta $da00,x
-    sta $db00,x
-    inx
-    bne !-
+    jsr city_colours
+
+    // wash away the skid marks of the last game
+    ldx #127
+!:  lda ring_hi,x
+    beq gs_ring
+    sta zp1 + 1
+    lda ring_lo,x
+    sta zp1
+    ldy #0
+    lda #ROADCH
+    sta (zp1),y
+    lda #0
+    sta ring_hi,x
+gs_ring:
+    dex
+    bpl !-
 
     lda #<START_X
     sta car_xl
@@ -741,36 +987,47 @@ game_start:
     sta bag
     sta ring_pos
     sta frame_ready
-    ldx #127
-!:  sta ring_hi,x
+    sta wanted
+    sta pending
+    sta chase
+    sta v1_own
+    sta v2_own
+    ldx #NNPC - 1
+!:  sta n_type,x
     dex
     bpl !-
+    lda #3
+    sta lives
+    sta hud_dirty
+    lda #JOB_TIME
+    sta job_start
+    sta job_time
+    lda #50
+    sta job_tick
     lda #1
     sta score_dirty
     lda #$ff
     sta fps_shown
 
-    // HUD sprites stay put
-    lda #33
-    sta sh_x + 0
-    lda #<278
-    sta sh_x + 1
-    lda #<302
-    sta sh_x + 2
+    // the arrow stays in the lower left corner; colours of the shared sprites
     lda #33
     sta sh_x + 3
-    lda #56
-    sta sh_y + 0
-    sta sh_y + 1
-    sta sh_y + 2
     lda #224
     sta sh_y + 3
-    lda #SP_FPS
-    sta sh_ptr + 0
-    lda #SP_SC1
-    sta sh_ptr + 1
-    lda #SP_SC2
-    sta sh_ptr + 2
+    lda #7
+    ldx #7
+!:  sta sh_col,x
+    dex
+    bpl !-
+    lda #8
+    sta sh_col + 4
+
+    // two cabs in town
+    jsr set_target
+    ldx #3
+    jsr spawn_cab
+    ldx #4
+    jsr spawn_cab
 
     // camera straight onto the car, draw the first screen into buffer A
     jsr camera_target
@@ -803,33 +1060,60 @@ game_start:
     jsr place_sprites
     jsr hud_update
     lda #1
+    sta in_game
     sta frame_ready
 
 game_loop:
     lda frame_ready                 // wait until the raster IRQ took the last frame
     bne game_loop
+    lda #0
+    sta scrolled
     lda debug_bar
     beq !+
     lda #2
     sta $d020
 !:  jsr read_input
     lda state
+    cmp #ST_ROB
+    bcs !+
+    lda key_map                     // SPACE: the city map (driving or walking)
+    beq !+
+    jsr show_map
+!:  lda state
     cmp #ST_DRIVE
     bne !+
+    jsr save_car
     jsr do_drive
-    jmp gl_camera
+    jmp gl_world
 !:  cmp #ST_WALK
     bne !+
     jsr do_walk
-    jmp gl_camera
-!:  jsr do_rob
+    jmp gl_world
+!:  cmp #ST_ROB
+    bne !+
+    jsr do_rob
     jmp gl_sprites
+!:  jsr do_msg
+    jmp gl_sprites
+gl_world:
+    lda state                       // police, cabs and the clock
+    cmp #ST_ROB
+    bcs gl_camera
+    jsr npc_frame
+    lda state
+    cmp #ST_ROB
+    bcs !+
+    jsr job_frame
+!:  lda state
+    cmp #ST_MSG
+    beq gl_sprites
 gl_camera:
     jsr update_camera
     jsr scroll_prepare
 gl_sprites:
     jsr place_sprites
     jsr hud_update
+    jsr sound_frame
     jsr perf_sample
     lda debug_bar
     beq !+
@@ -838,6 +1122,42 @@ gl_sprites:
 !:  lda #1
     sta frame_ready
     jmp game_loop
+
+// the B->A screen shift lives at $e000 (where the title picture was)
+gen_shift_ba:
+    lda #<shift_ba
+    sta zdst
+    lda #>shift_ba
+    sta zdst + 1
+    lda #<SCR_B
+    sta t0
+    lda #>SCR_B
+    sta t1
+    lda #<SCR_A
+    sta t2
+    lda #>SCR_A
+    sta t3
+    jmp gen_shift
+
+// the city palette, one colour RAM value everywhere
+city_colours:
+    lda #0
+    sta $d020
+    lda #ROAD_COL
+    sta $d021
+    lda #WALK_COL
+    sta $d022
+    lda #ROOF_COL
+    sta $d023
+    ldx #0
+    lda #COLRAM
+!:  sta $d800,x
+    sta $d900,x
+    sta $da00,x
+    sta $db00,x
+    inx
+    bne !-
+    rts
 
 // how long the main loop took this frame (raster lines since the IRQ, halved)
 perf_sample:
@@ -1451,29 +1771,47 @@ to_cell:
     clc
 !:  rts
 
-// put a character on the shown screen if map cell (mcol, mrow) is visible
+// put character a on the shown screen if map cell (mcol, mrow) is visible
+// (and into the hidden one too when its first half is shifted already)
 screen_cell:
     sta t4
     lda mcol
     sec
     sbc disp_cx
-    cmp #40
-    bcs !+
-    tay
+    sta sc_c
     lda mrow
     sec
     sbc disp_cy
-    cmp #25
-    bcs !+
-    tax
+    sta sc_r
+    lda front_hi
+    jsr sc_put
+    lda pending
+    beq sce_done
+    lda sc_c
+    sec
+    sbc pend_dx
+    sta sc_c
+    lda sc_r
+    sec
+    sbc pend_dy
+    sta sc_r
+    lda front_hi
+    eor #$04
+sc_put:
+    ldy sc_c
+    cpy #40
+    bcs sce_done
+    ldx sc_r
+    cpx #25
+    bcs sce_done
+    ora srow_hi,x
+    sta zp1 + 1
     lda srow_lo,x
     sta zp1
-    lda srow_hi,x
-    ora front_hi
-    sta zp1 + 1
     lda t4
     sta (zp1),y
-!:  rts
+sce_done:
+    rts
 
 // ---------------------------------------------------------------- skid marks
 do_skids:
@@ -1890,7 +2228,7 @@ end_rob:
     sta target
     lda #ST_WALK
     sta state
-    rts
+    jmp job_done                    // time bonus, the next job, the police
 
 // a comic bubble near the bank door, different word and colour each time
 new_bubble:
@@ -1972,6 +2310,8 @@ new_bubble:
     lda #SFX_POW
     jsr sfx_play
 
+// draw the bubble: bub_word, bub_w, bub_col, bub_x, bub_y
+draw_bubble:
     // row 0: top edge with spikes
     ldx bub_w
     dex
@@ -2231,6 +2571,10 @@ ct_man:
     rts
 
 update_camera:
+    lda cam_xl                      // for predict: how far it moves
+    sta last_xl
+    lda cam_yl
+    sta last_yl
     jsr camera_target
     // cam += (target - cam) / 8, both axes, 16.8 fixed point
     lda #0
@@ -2375,9 +2719,13 @@ scroll_prepare:
     sbc disp_cy
     sta ddy
     ora ddx
-    bne !+
+    bne sp_cross
+    jsr predict
     jmp scroll_regs
-!:  lda front_hi
+sp_cross:
+    inc scrolled
+    inc n_cross
+    lda front_hi
     eor #$04
     sta back_hi
     // big jump (never while playing): draw everything
@@ -2391,25 +2739,23 @@ scroll_prepare:
     adc #1
     cmp #3
     bcs sp_full
-    // x = 41 + ddx + 40 * ddy
-    lda #41
-    clc
-    adc ddx
-    ldx ddy
-    beq sp_go
-    bmi !+
-    clc
-    adc #40
-    jmp sp_go
-!:  sec
-    sbc #40
-sp_go:
-    tax
-    lda front
-    bne !+
-    jsr shift_ab
-    jmp sp_edges
-!:  jsr shift_ba
+    // the first half of the shift done already (for this direction)?
+    lda pending
+    beq sp_hold
+    lda ddx
+    cmp pend_dx
+    bne sp_hold
+    lda ddy
+    cmp pend_dy
+    bne sp_hold
+    lda ddx
+    sta t0
+    lda ddy
+    sta t1
+    jsr dd_offset
+    jsr shift_half1
+    lda #0
+    sta pending
 sp_edges:
     lda ddx
     beq sp_rows
@@ -2430,6 +2776,8 @@ sp_rows:
     jsr draw_row
     jmp sp_flip
 sp_full:
+    lda #0
+    sta pending
     jsr full_redraw
 sp_flip:
     lda ncx
@@ -2445,6 +2793,186 @@ sp_flip:
     lda d018_tab,x
     sta sh_d018
     jmp scroll_regs
+sp_hold:
+    inc n_hold
+    // not prepared: the camera stays on this side of the boundary for a
+    // frame while the first half is shifted
+    lda ddx
+    sta pend_dx
+    sta t0
+    beq sp_hy
+    bmi !+
+    lda disp_cx                     // moving right: x = disp_cx * 8 + 7
+    jsr times8
+    ora #7
+    sta cam_xl
+    stx cam_xh
+    lda #$ff
+    sta cam_xf
+    jmp sp_hy
+!:  lda disp_cx                     // moving left: x = disp_cx * 8
+    jsr times8
+    sta cam_xl
+    stx cam_xh
+    lda #0
+    sta cam_xf
+sp_hy:
+    lda ddy
+    sta pend_dy
+    sta t1
+    beq sp_half
+    bmi !+
+    lda disp_cy
+    jsr times8
+    ora #7
+    sta cam_yl
+    stx cam_yh
+    lda #$ff
+    sta cam_yf
+    jmp sp_half
+!:  lda disp_cy
+    jsr times8
+    sta cam_yl
+    stx cam_yh
+    lda #0
+    sta cam_yf
+sp_half:
+    jsr dd_offset
+    jsr shift_half0
+    lda #1
+    sta pending
+    jmp scroll_regs
+
+// a (0-127) * 8 -> a (low), x (high)
+times8:
+    ldx #0
+    stx t2
+    asl
+    rol t2
+    asl
+    rol t2
+    asl
+    rol t2
+    ldx t2
+    rts
+
+// Where will the camera be next frame (it moves about as much as in this
+// one)? If that is over a character boundary, shift the first half now.
+predict:
+    lda pending
+    bne pr_done
+    lda cam_xl
+    sec
+    sbc last_xl
+    jsr pr_axis_x
+    sta t0
+    lda cam_yl
+    sec
+    sbc last_yl
+    jsr pr_axis_y
+    sta t1
+    ora t0
+    beq pr_done
+    lda t0
+    clc
+    adc #1
+    cmp #3
+    bcs pr_done
+    lda t1
+    clc
+    adc #1
+    cmp #3
+    bcs pr_done
+    lda t0
+    sta pend_dx
+    lda t1
+    sta pend_dy
+    inc scrolled
+    jsr dd_offset
+    jsr shift_half0
+    lda #1
+    sta pending
+pr_done:
+    rts
+// a = movement this frame -> a = predicted character step (x / y)
+pr_axis_x:
+    ldx #0
+    cmp #$80
+    bcc !+
+    dex
+!:  stx t3
+    clc
+    adc cam_xl
+    sta t2
+    lda cam_xh
+    adc t3
+    jsr pr_chars
+    sec
+    sbc disp_cx
+    rts
+pr_axis_y:
+    ldx #0
+    cmp #$80
+    bcc !+
+    dex
+!:  stx t3
+    clc
+    adc cam_yl
+    sta t2
+    lda cam_yh
+    adc t3
+    jsr pr_chars
+    sec
+    sbc disp_cy
+    rts
+pr_chars:                           // (a:t2) / 8
+    lsr
+    ror t2
+    lsr
+    ror t2
+    lsr
+    ror t2
+    lda t2
+    rts
+
+// x = 41 + t0 + 40 * t1 (t0, t1 = -1..1): the shift routine's offset
+dd_offset:
+    lda #41
+    clc
+    adc t0
+    ldx t1
+    beq !++
+    bmi !+
+    clc
+    adc #40
+    jmp !++
+!:  sec
+    sbc #40
+!:  tax
+    rts
+
+// the generated shift in two halves (500 characters each), x = offset
+.const HALF = 500 * 6
+shift_half0:
+    lda front
+    bne !+
+    lda #$60                        // rts in the middle for a moment
+    sta shift_ab + HALF
+    jsr shift_ab
+    lda #$bd
+    sta shift_ab + HALF
+    rts
+!:  lda #$60
+    sta shift_ba + HALF
+    jsr shift_ba
+    lda #$bd
+    sta shift_ba + HALF
+    rts
+shift_half1:
+    lda front
+    bne !+
+    jmp shift_ab + HALF
+!:  jmp shift_ba + HALF
 
 d018_tab: .byte D018_A, D018_B
 
@@ -2637,9 +3165,14 @@ sp_off:
 bit_tab: .byte 1, 2, 4, 8, 16, 32, 64, 128
 
 place_sprites:
-    lda #%00001111
+    lda state                       // during a message: as before it
+    cmp #ST_MSG
+    bne !+
+    lda msg_prev
+!:  sta pstate
+    lda #%00001000                  // the arrow is always there
     sta sh_en
-    lda #%00000110
+    lda #0
     sta sh_msb
     // the car (sprite 5)
     lda car_xl
@@ -2661,9 +3194,11 @@ place_sprites:
     adc #SP_CAR
     sta sh_ptr + 5
     // the bandit (sprite 4)
-    lda state
+    lda pstate
     cmp #ST_WALK
     bne ps_marker
+    lda #8
+    sta sh_col + 4
     lda man_xl
     sta px_l
     lda man_xh
@@ -2696,7 +3231,7 @@ place_sprites:
     sta sh_ptr + 4
 ps_marker:
     // the marker over the target bank (sprite 6), not during the robbery
-    lda state
+    lda pstate
     cmp #ST_ROB
     beq ps_arrow
     ldx target
@@ -2729,7 +3264,7 @@ ps_marker:
     sta sh_ptr + 6
 ps_arrow:
     // the arrow (sprite 3) points from the player to the target bank
-    lda state
+    lda pstate
     cmp #ST_WALK
     bne !+
     lda man_xl
@@ -2769,7 +3304,7 @@ pa_go:
     clc
     adc #SP_ARROW
     sta sh_ptr + 3
-    rts
+    jmp place_npcs
 
 bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
 
@@ -2929,7 +3464,10 @@ cmp_t01_t23:
     rts
 
 hud_update:
-    lda fps_val
+    lda scrolled
+    beq !+
+    rts
+!:  lda fps_val
     cmp fps_shown
     beq hu_score
     sta fps_shown
@@ -2995,19 +3533,82 @@ hu_score:
     ldx #2
     jsr hud_digit
 hu_done:
+    // job timer and lives / wanted stars
+    lda hud_dirty
+    bne !+
+    rts
+!:  lda #<(SPRLO + (SP_TIME - 32) * 64)
+    sta zp1
+    lda #>(SPRLO + (SP_TIME - 32) * 64)
+    sta zp1 + 1
+    lda hud_dirty
+    and #1
+    beq hu_lv
+    lda job_time
+    lsr
+    lsr
+    lsr
+    lsr
+    ldx #1
+    jsr hud_digit
+    lda job_time
+    and #15
+    ldx #2
+    jsr hud_digit
+hu_lv:
+    lda hud_dirty
+    and #2
+    beq hu_clean
+    lda #10
+    ldx #0
+    jsr hud_digit
+    lda #<(SPRLO + (SP_LIVES - 32) * 64)
+    sta zp1
+    lda #>(SPRLO + (SP_LIVES - 32) * 64)
+    sta zp1 + 1
+    ldx #0
+hu_life:
+    lda #10                         // a heart per life left
+    cpx lives
+    bcs !+
+    lda #11
+!:  stx t5
+    jsr hud_digit
+    ldx t5
+    lda #13                         // a star per police car to come
+    cpx wanted
+    bcs !+
+    lda #12
+!:  jsr hud_label
+    ldx t5
+    inx
+    cpx #3
+    bne hu_life
+hu_clean:
+    lda #0
+    sta hud_dirty
     rts
 
+// glyph a into cell x of the label row of the HUD sprite at (zp1)
+hud_label:
+    sta t0
+    txa
+    clc
+    adc #21
+    jmp hd_common
 // digit a into cell x of the HUD sprite at (zp1)
 hud_digit:
     sta t0
-    asl
-    asl
-    adc t0                          // digit * 5
-    tay
     txa
     clc
     adc #3                          // sprite row 1
+hd_common:
     sta t1
+    lda t0
+    asl
+    asl
+    adc t0                          // glyph * 5
+    tay
     lda #5
     sta t2
 !:  lda digit_rows,y
@@ -3023,6 +3624,9 @@ hud_digit:
     dec t2
     bne !-
     rts
+
+#import "chase.asm"
+#import "screens.asm"
 
 // =====================================================================
 #import "music.asm"
@@ -3061,12 +3665,6 @@ gl_br:      .fill glBR.size(), glBR.get(i)
 sqr_lo:     .fill 512, <floor(i * i / 4)
 sqr_hi:     .fill 512, >floor(i * i / 4)
 
-charset_src:
-.for (var c = 0; c < chars.size(); c++) .fill 8, chars.get(c).get(i)
-.fill (256 - chars.size()) * 8, 0
-sprhi_src:  .fill sprHi.size(), sprHi.get(i)
-sprlo_src:  .fill sprLo.size(), sprLo.get(i)
-.fill 32 * 64 - sprLo.size(), 0
 
 .var mapPacked = rlePack(cityMap)
 map_rle:    .fill mapPacked.size(), mapPacked.get(i)
@@ -3078,7 +3676,20 @@ intro_screen: .fill scrPacked.size(), scrPacked.get(i)
 intro_color: .fill colPacked.size(), colPacked.get(i)
 program_end:
 
+// only needed once at start-up (unpacked before the map goes to $8000, so
+// this part may reach past $8000)
+.var charsetBytes = List()
+.for (var c = 0; c < 256; c++) .for (var b = 0; b < 8; b++) .eval charsetBytes.add((c < chars.size()) ? chars.get(c).get(b) : 0)
+.var charsetPacked = rlePack(charsetBytes)
+.var sprHiPacked = rlePack(sprHi)
+.var sprLoPacked = rlePack(sprLo)
+charset_rle: .fill charsetPacked.size(), charsetPacked.get(i)
+sprhi_rle:  .fill sprHiPacked.size(), sprHiPacked.get(i)
+sprlo_rle:  .fill sprLoPacked.size(), sprLoPacked.get(i)
+init_end:
+
 .print "Map packed: " + mapPacked.size() + " bytes, title: " + (bmpPacked.size() + scrPacked.size() + colPacked.size())
-.print "Program ends at $" + toHexString(program_end)
+.print "Program ends at $" + toHexString(program_end) + ", start-up data at $" + toHexString(init_end)
 .errorif program_end > MAP, "program overlaps the map at $8000"
+.errorif init_end > $a000, "start-up data must end below $a000 (BASIC LOAD limit)"
 .errorif mapPacked.size() < 6001, "the packed map area must hold the A->B shift routine (6001 bytes)"
