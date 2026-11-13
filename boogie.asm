@@ -53,6 +53,7 @@
 .const SFX_CRASH = 1
 .const SFX_CHING = 2
 .const SFX_DOOR = 3
+.const SFX_STEP = 4
 
 .const NBANKS = bankDoorX.size()
 // police, cabs, jobs (chase.asm)
@@ -2031,6 +2032,13 @@ dw_move:
 !:  lda t3
     beq !+
     inc man_anim
+    lda man_anim                    // footsteps: one per step of the animation
+    and #7
+    bne !+
+    lda sfx_on                      // (not over another effect)
+    bne !+
+    lda #SFX_STEP
+    jsr sfx_play
     // at the bank door?
 !:  ldx target
     lda man_xl

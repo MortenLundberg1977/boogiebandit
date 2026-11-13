@@ -34,7 +34,9 @@ a cab that is blocked for a second turns around. Flooring it from standstill
 
 Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar.
 Sound: the tune on 3 voices; while driving voice 2 is the engine (pitch from
-the speed), during a chase voice 1 is the siren; effects on voice 3.
+the speed), during a chase voice 1 is the siren; effects on voice 3 (pow,
+crash, ching, door, and a soft footstep every 8 frames while walking, only
+when no other effect is playing).
 
 ## Build and test
 

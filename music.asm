@@ -456,12 +456,13 @@ sfx_end:
     sta sfx_on
     rts
 
-sfx_lo: .byte <sfx_pow, <sfx_crash, <sfx_ching, <sfx_door
-sfx_hi: .byte >sfx_pow, >sfx_crash, >sfx_ching, >sfx_door
+sfx_lo: .byte <sfx_pow, <sfx_crash, <sfx_ching, <sfx_door, <sfx_step
+sfx_hi: .byte >sfx_pow, >sfx_crash, >sfx_ching, >sfx_door, >sfx_step
 sfx_pow:   .byte $09, $00, $81, $40, $81, $30, $81, $24, $81, $1c, $81, $14, $81, $10, $81, $0c, $81, $08, $80, $08, 0
 sfx_crash: .byte $0c, $00, $81, $10, $81, $10, $81, $0e, $81, $0c, $81, $0a, $81, $09, $81, $08, $81, $07, $80, $07, 0
 sfx_ching: .byte $09, $00, $41, $40, $41, $40, $41, $40, $41, $56, $41, $56, $41, $56, $41, $56, $41, $56, $41, $56, $40, $56, 0
 sfx_door:  .byte $05, $00, $81, $20, $81, $18, $80, $18, 0
+sfx_step:  .byte $02, $00, $81, $0b, $80, $09, 0    // a soft heel tap (noise, 2 frames)
 
 // ---------------------------------------------------------------- player data
 sidoff: .byte 0, 7, 14
