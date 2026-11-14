@@ -44,8 +44,10 @@ VICE (`x64sc`, `c1541` on `PATH`).
 build.bat run
 ```
 
-builds `build\boogie.prg` and `build\boogiebandit.d64` and starts VICE. On a
-real C64: `LOAD"BOOGIE",8` then `RUN`.
+builds `build\boogie.prg`, a disk image `build\boogiebandit.d64` and a tape
+image `build\boogiebandit.t64` (the same program, for loaders and emulators
+that take .t64), and starts VICE. On a real C64 from the disk:
+`LOAD"BOOGIE",8` then `RUN`.
 
 All graphics, the title picture, the fonts and the music are generated at
 build time from the sources; there are no binary assets.

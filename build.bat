@@ -58,5 +58,12 @@ if exist build\boogiebandit.d64 del build\boogiebandit.d64
 if errorlevel 1 exit /b 1
 :disk_done
 
-echo Built build\boogie.prg and build\boogiebandit.d64
+REM The same program as a tape image (.t64) for emulators and SD-card loaders.
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\make_t64.ps1 build\boogie.prg build\boogiebandit.t64 BOOGIE "BOOGIE BANDIT" >nul
+if errorlevel 1 (
+    echo Could not write the .t64 tape image.
+    exit /b 1
+)
+
+echo Built build\boogie.prg, build\boogiebandit.d64 and build\boogiebandit.t64
 if /I "%~1"=="run" x64sc -autostart build\boogiebandit.d64
