@@ -11,6 +11,7 @@
 .const CL_FREE = 0              // class bits: 1 = blocks the car, 2 = blocks the walker
 .const CL_SOLID = 3
 .const CL_DOOR = 7              // 4 = bank door
+.const CL_PAINT = 8             // the spray booth of a paint garage (drivable)
 
 .var chars = List()
 .var charKeys = Hashtable()
@@ -108,6 +109,19 @@
 .var BANKWORD = stamp(bankText, CL_SOLID)
 .var bankDoor = stamp(List().add(
     "yyyyyyyy", "ybbbbbby", "ybbbbbby", "ybbbbbby", "ybbybbby", "ybbbbbby", "ybbbbbby", "yyyyyyyy"), CL_DOOR)
+
+// paint garage: a sign on the roof and an open spray booth at the front
+.var paintText = List()
+.for (var y = 0; y < 8; y++) {
+    .var s = ""
+    .for (var i = 0; i < 5; i++) .for (var x = 0; x < 4; x++) .eval s = s + ((y >= 1 && fontPix("PAINT".charAt(i), x, y - 1)) ? "y" : "b")
+    .eval paintText.add(s)
+}
+.var PAINTWORD = stamp(paintText, CL_SOLID)
+.var paintBay = stamp(List().add(
+    "wwwwwwwwwwwwwwww", "wbybbbybbybbbybw", "wbybbbybbybbbybw", "wbbbbbbbbbbbbbbw", "wbbbwbbbbbbwbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw",
+    "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw",
+    "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "wbbbbbbbbbbbbbbw", "yybbyybbyybbyybb", "yybbyybbyybbyybb"), CL_PAINT)
 
 // water tank (2 x 2 characters, drawn on brown roofs)
 .var tankArt = List()
@@ -228,6 +242,9 @@
 .var bankLots = List().add(List().add(1, 1), List().add(3, 1), List().add(2, 3), List().add(1, 4),
                            List().add(3, 4), List().add(2, 6), List().add(1, 7), List().add(3, 7))
 .var parkLots = List().add(List().add(1, 2), List().add(3, 6))
+.var garageLots = List().add(List().add(3, 2), List().add(2, 4), List().add(1, 6))
+.var garageX = List()            // middle of the spray booth, world pixels
+.var garageY = List()
 .function isLot(list, kx, ky) {
     .for (var i = 0; i < list.size(); i++) .if (list.get(i).get(0) == kx && list.get(i).get(1) == ky) .return i
     .return -1
@@ -256,6 +273,7 @@
         .if (by1 < 125) .eval mset(bx0 + 1 + rnd(bw - 2), by1 + 2, HYDRANT)
         .var b = isLot(bankLots, kx, ky)
         .var p = isLot(parkLots, kx, ky)
+        .var g = isLot(garageLots, kx, ky)
         .if (b >= 0) {
             .var bankx = bx0 + floor((bw - 10) / 2)
             .eval buildings(bx0, by0, bankx - bx0, bh)
@@ -266,6 +284,17 @@
             .eval mstamp(bankx + 4, by0 + bh - 1, bankDoor)
             .eval bankDoorX.set(b, (bankx + 5) * 8)
             .eval bankDoorY.set(b, (by0 + bh) * 8 + 6)
+        } else {
+        .if (g >= 0) {
+            // a paint garage, the spray booth open to the street below
+            .var gx = bx0 + floor((bw - 10) / 2)
+            .eval buildings(bx0, by0, gx - bx0, bh)
+            .eval nine(gx, by0, 10, bh, roofC)
+            .eval buildings(gx + 10, by0, bx1 - gx - 9, bh)
+            .eval mstamp(gx + 2, by0 + 1, PAINTWORD)
+            .eval mstamp(gx + 3, by0 + bh - 3, paintBay)
+            .eval garageX.add((gx + 5) * 8)
+            .eval garageY.add((by0 + bh - 1) * 8)
         } else {
         .if (p >= 0) {
             .eval mfill(bx0, by0, bw, bh, ROADCH)
@@ -279,6 +308,7 @@
             }
         } else {
             .eval buildings(bx0, by0, bw, bh)
+        }
         }
         }
     }
@@ -399,3 +429,6 @@
 }
 .eval mapCode.set(WALLCH, 0)
 .for (var y = 0; y < cabV.size(); y++) .for (var x = 0; x < cabV.get(0).size(); x++) .eval mapCode.set(cabV.get(y).get(x), 1)
+// paint garages show yellow on the map: the sign and the booth
+.for (var x = 0; x < 5; x++) .eval mapCode.set(PAINTWORD.get(0).get(x), 3)
+.for (var y = 0; y < 3; y++) .for (var x = 0; x < 4; x++) .eval mapCode.set(paintBay.get(y).get(x), 3)

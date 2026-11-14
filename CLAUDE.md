@@ -21,7 +21,27 @@ on the job timer), the next bank is chosen (target + 3 of 8), one more wanted
 star lights up (at most 3) and that many police cars come after him. Fire next
 to the car gets back in. Lose every police car (they give up 2-3 screens
 away): ESCAPED!, $500. Touched by one (car to car, or within 32 pixels on
-foot): BUSTED!, a life gone, the stars reset. The job timer starts at 60
+foot): BUSTED!, a life gone, the stars reset.
+
+The police get tougher with every bank robbed this game (`jobs`, at most 9):
+speed 1.75 pixels a frame on the first chase, +0.19 per job, at most 2.7 (the
+car does 3). From the 2nd robbery on a police car near the player (on screen,
+32-120 pixels away) stops and the officer gets out (blue, slot 3 / sprite 2,
+the cab there goes away while he is out), turns to the player and fires two
+shots (8 directions, 3 pixels a frame, stopped by buildings; a hit is
+BUSTED!), then gets back in; 4 seconds before anyone gets out again. From the
+3rd robbery on there is a roadblock (slot 2, so at most 2 chasing cars): a
+police car parked across the road 2-3 blocks ahead of where the car is going,
+stretched with sprite expansion to cover the whole road; driving into it is
+BUSTED!, the sidewalk just leaves room to squeeze by. Police cars speed up
+gently, slow down for corners, stop for a U-turn, and keep going straight
+while that still leads to the player (no zigzag).
+
+Three paint garages (yellow PAINT sign, an open spray booth facing the street
+below; small yellow marks on the city map): stop in the booth during a chase
+and after 1.5 seconds of spraying the car has a new colour, costs $300, and
+every police car loses the trail (`NT_LOST`: they drive on at random and
+leave), so ESCAPED! (+$500). The job timer starts at 60
 seconds and gets 3 seconds shorter per job (at least 30); run out: TOO SLOW!,
 a life gone, next bank. Three lives (hearts in the HUD); then game over, name
 entry if the score makes the top 5 (kept until the C64 is switched off), and
@@ -37,8 +57,8 @@ honk on a nudge and now and then on their own. Flooring it from standstill
 Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar.
 Sound: the tune on 3 voices; while driving voice 2 is the engine (pitch from
 the speed), during a chase voice 1 is the siren; effects on voice 3 (pow,
-crash, ching, door, two cab horns, and a footstep every 8 frames while walking, only
-when no other effect is playing).
+crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
+8 frames while walking, only when no other effect is playing).
 
 ## Build and test
 
@@ -61,8 +81,12 @@ when no other effect is playing).
   (character crossings / the ones the scroll did not predict),
   `state` $21 (0 drive, 1 walk, 2 robbery, 3 message), `target` $4c,
   `score` $57 (BCD, lowest byte first), `lives` $91, `wanted` $92, `chase` $93,
-  `job_time` $94 (BCD seconds), `n_type` $3a1 (5 slots: 1 police, 2 cab; then
-  x low/high, y low/high, direction, 5 bytes each),
+  `job_time` $94 (BCD seconds), `n_type` $3a1 (5 slots: 1 police, 2 cab,
+  3 officer, 4 police that lost the trail, 5 roadblock; then x low/high,
+  y low/high, direction, 5 bytes each), `jobs` $d4 (poke 2 before a robbery
+  for shooting and roadblocks), `officer` $d7, `bul_t` $da, `car_col` $e1
+  (the garage at lot (2,4): car x $0200, y $0244, heading 0, drive up into
+  the booth),
   `car_xl`/`car_yl` $24/$27 (+1 high byte), `hdg`/`mang` $2a/$2b, `debug_bar` $1f.
   Teleport next to bank 0: `poke 24 00 01; poke 27 c4 00; poke 2a c0 c0`, then
   fire, `poke 1d 01` for 1.2 s walks into the door. Poke `wanted` to 2 during
@@ -73,11 +97,11 @@ when no other effect is playing).
 | File | What |
 |---|---|
 | `boogie.asm` | main: memory map, init, raster IRQs, title, game loop, car physics, walking, robbery, scrolling, sprites, HUD, tables |
-| `chase.asm` | police and cabs (road-grid driving), arrests, escapes, job timer, lives, message bubbles, engine and siren |
+| `chase.asm` | police and cabs (road-grid driving), officers shooting, roadblocks, paint garages, arrests, escapes, job timer, lives, message bubbles, engine and siren |
 | `screens.asm` | bitmap screens: text in the 4x7 font, title pages, high score table and name entry, the city map |
 | `music.asm` | SID player (register shadow, patterns as text) + the tune "Getaway Groove" + sound effects on voice 3 |
 | `gfx_lib.asm` | build-time helpers: random, 4x7 font, 3x5 HUD font, RLE packer |
-| `gfx_city.asm` | build-time: multicolor charset, the city map, banks, comic bubble characters, map colours, skid-mark tables |
+| `gfx_city.asm` | build-time: multicolor charset, the city map, banks, paint garages (spray booth chars have class `CL_PAINT` = 8), comic bubble characters, map colours, skid-mark tables |
 | `gfx_sprites.asm` | build-time: car (16 rotations), arrow dial (16), bandit (4 dirs x 2 steps, with/without bag), marker, HUD boxes, title text, police car (4), map dots |
 | `gfx_intro.asm` | build-time: the title picture (multicolor bitmap) |
 
@@ -90,7 +114,7 @@ into characters and de-duplicated.
 
 - `$0200-$02ff` skid-mark ring buffer (128 map addresses), `$0300-$03ff` arrays
   (music, sprite shadows, police/cab slots).
-- `$0801-$74xx` program + data (must stay below $8000; ~2.9 KB free). After it
+- `$0801-$79xx` program + data (must stay below $8000; ~1.7 KB free). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.
@@ -113,8 +137,10 @@ The raster IRQ at line 250 applies the frame the main loop prepared
 of the shadows for 0-3 and 7. It puts the HUD row at the top (sprites 0-3 and
 7: fps, timer, hearts/stars, score), counts shown frames for the fps meter,
 plays music and effects and sets a second IRQ at line 80 (`irq_split`), which
-turns sprites 0-3 and 7 into police cars, cabs and the arrow. So those can't
-be shown above line 88 (they are hidden there).
+turns sprites 0-3 and 7 into police cars, cabs and the arrow (and sets their
+x/y expansion, for the roadblock). So those can't be shown above line 88
+(they are hidden there). Sprite 6 is the bank marker, or a police bullet
+(`SP_DOT`) while one flies; the car's colour comes from `sh_col + 5`.
 
 The main loop waits for the frame to be taken, then: input, state
 (drive/walk/robbery/message), police and cabs, the job timer, camera (eases
@@ -142,7 +168,8 @@ cabs at random, police towards the player (longer distance first) and they
 turn around when the player is behind them.
 
 Measured worst case (3 police cars, 2 cabs, skid marks, hard turning):
-`perf_max` ≈ $8a = 138 of 156; plain driving ≈ $6b.
+`perf_max` ≈ $8a = 138 of 156; plain driving ≈ $6b; 2 police cars, an
+officer shooting and a roadblock ≈ $83.
 
 ## Conventions
 
@@ -152,7 +179,7 @@ Measured worst case (3 police cars, 2 cabs, skid marks, hard turning):
 
 ## Ideas on the list
 
-More banks and a second district; police roadblocks; a minimap in the HUD
+More banks and a second district; a minimap in the HUD
 (the full map is on SPACE); saving the high scores to disk; a park or river
 would need green/blue, which the one-colour-RAM city can't show (it would need
 colour RAM scrolling, ~8,000 more cycles a scroll).

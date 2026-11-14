@@ -10,6 +10,7 @@ shown top left.
 
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
+![Officer shooting](screenshots/16_officer_shooting.png) ![Paint garage](screenshots/15_paint_garage.png)
 
 ## How to play
 
@@ -17,6 +18,13 @@ shown top left.
   out, or that job is off and you lose a heart.
 - Each robbery adds a wanted star, and that many police cars come after you.
   Lose them all and you get a $500 bonus. If one catches you, you're BUSTED!
+- The police get tougher with every bank you rob. The first chase is a single
+  slow car. After that, officers stop, get out and shoot (dodge the bullets
+  or duck behind a building), and from the third job on they set up
+  roadblocks ahead of you. You can just squeeze past one on the sidewalk.
+- Three paint garages (look for the yellow PAINT sign; small yellow marks on
+  the city map). Stop inside the spray booth during a chase: $300 for a new
+  colour, and the police lose your trail.
 - Three hearts, then game over. The best five bandits make the table on the
   title screen.
 - Watch out for the yellow cabs.

@@ -456,8 +456,13 @@ sfx_end:
     sta sfx_on
     rts
 
-sfx_lo: .byte <sfx_pow, <sfx_crash, <sfx_ching, <sfx_door, <sfx_step, <sfx_honk, <sfx_honk2
-sfx_hi: .byte >sfx_pow, >sfx_crash, >sfx_ching, >sfx_door, >sfx_step, >sfx_honk, >sfx_honk2
+sfx_lo: .byte <sfx_pow, <sfx_crash, <sfx_ching, <sfx_door, <sfx_step, <sfx_honk, <sfx_honk2, <sfx_shot, <sfx_spray
+sfx_hi: .byte >sfx_pow, >sfx_crash, >sfx_ching, >sfx_door, >sfx_step, >sfx_honk, >sfx_honk2, >sfx_shot, >sfx_spray
+// a police gunshot (a sharp noise crack), the spray gun (a hiss)
+sfx_shot:  .byte $08, $00, $81, $60, $81, $48, $81, $30, $81, $20, $81, $14, $80, $10, 0
+sfx_spray: .byte $00, $f0
+           .fill 10, [$81, $68]
+           .byte $80, $68, 0
 // cab horns (sawtooth): one long honk, and a lower "honk-honk"
 sfx_honk:  .byte $00, $c1
            .fill 10, [$21, $1c]

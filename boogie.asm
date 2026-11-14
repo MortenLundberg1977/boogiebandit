@@ -61,8 +61,21 @@
 .const NNPC = 5
 .const NT_COP = 1
 .const NT_CAB = 2
+.const NT_OFF = 3                // a police officer on foot (slot 3), shooting
+.const NT_LOST = 4               // a police car that lost the trail (new paint)
+.const NT_BLOCK = 5              // a roadblock (slot 2)
 .const CAB_SPEED = 96            // 1/64 pixels a frame: 1.5
-.const COP_SPEED = 136           // 2.1, + 12 for each wanted star
+.const COP_SPEED = 100           // 1.6, + 12 for each bank robbed (at most COP_MAX)
+.const COP_MAX = 172             // 2.7 (the car does 3)
+.const COP_ACCEL = 3             // police and cabs speed up by this a frame
+.const SHOOT_JOBS = 2            // the police shoot from the second robbery on
+.const BLOCK_JOBS = 3            // ... and set up roadblocks from the third
+.const OUT_FRAMES = 100          // an officer stays out 2 seconds, two shots
+.const SHOOT_CD = 200            // then nobody gets out for 4 seconds
+.const BULLET_FRAMES = 40
+.const PAINT_FRAMES = 75         // 1.5 seconds in the spray booth
+.const SFX_SHOT = 7
+.const SFX_SPRAY = 8
 .const MSG_FRAMES = 100
 .const W_BUSTED = 16             // message words (gfx_city.asm)
 .const W_ESCAPED = 17
@@ -270,6 +283,26 @@
 .label mb_y = zalloc(1)
 .label mb_w = zalloc(1)
 .label mb_h = zalloc(1)
+.label jobs = zalloc(1)          // banks robbed this game (at most 9): how tough the police are
+.label ncops = zalloc(1)
+.label odir = zalloc(1)
+.label officer = zalloc(1)       // the police car whose officer is out ($ff: none)
+.label shoot_cd = zalloc(1)
+.label block_cd = zalloc(1)
+.label bul_t = zalloc(1)         // a bullet in flight (frames left, 0 = none)
+.label bul_xl = zalloc(1)
+.label bul_xh = zalloc(1)
+.label bul_yl = zalloc(1)
+.label bul_yh = zalloc(1)
+.label bul_dx = zalloc(1)
+.label bul_dy = zalloc(1)
+.label car_col = zalloc(1)       // the getaway car's paint
+.label car_col_i = zalloc(1)
+.label paint_t = zalloc(1)       // frames in the spray booth
+.label sh_xexp = zalloc(1)       // x / y expanded shared sprites (the roadblock)
+.label sh_yexp = zalloc(1)
+.label lv_xexp = zalloc(1)
+.label lv_yexp = zalloc(1)
 .errorif zpNext > $100, "zero page full"
 .errorif car_yh - car_xf != 5, "car_xf..car_yh must be in a row (save_car)"
 
@@ -312,7 +345,8 @@
 .label n_dir = balloc(5)
 .label n_acc = balloc(5)
 .label n_spd = balloc(5)
-.label n_wait = balloc(5)
+.label n_wait = balloc(5)          // cabs: frames blocked; police: frames the officer stays out
+.label n_cur = balloc(5)           // speed now (speeds up to n_spd)
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -546,6 +580,12 @@ irq:
     sta lv_msb
     lda sh_en
     sta lv_en
+    lda sh_xexp
+    sta lv_xexp
+    lda sh_yexp
+    sta lv_yexp
+    lda sh_col + 5
+    sta $d02c
     lda sh_x + 4
     sta $d008
     lda sh_y + 4
@@ -624,6 +664,9 @@ irq_noframe:
     and #%01110000
     ora #%10001111
     sta $d015
+    lda #0                          // the HUD row is never expanded
+    sta $d017
+    sta $d01d
     lda #SPLIT_LINE
     sta $d012
     lda #<irq_split
@@ -708,6 +751,10 @@ irq_split:
     sta $d02e
     lda lv_en
     sta $d015
+    lda lv_xexp
+    sta $d01d
+    lda lv_yexp
+    sta $d017
 is_done:
     lda #IRQ_LINE
     sta $d012
@@ -994,10 +1041,21 @@ gs_ring:
     sta chase
     sta v1_own
     sta v2_own
+    sta jobs
+    sta bul_t
+    sta shoot_cd
+    sta block_cd
+    sta paint_t
+    sta car_col_i
     ldx #NNPC - 1
 !:  sta n_type,x
+    sta n_cur,x
     dex
     bpl !-
+    lda #$ff
+    sta officer
+    lda #2
+    sta car_col                     // red
     lda #3
     sta lives
     sta hud_dirty
@@ -1086,6 +1144,7 @@ game_loop:
     bne !+
     jsr save_car
     jsr do_drive
+    jsr paint_check
     jmp gl_world
 !:  cmp #ST_WALK
     bne !+
@@ -2172,6 +2231,7 @@ start_rob:
     lda #0
     sta bub_n
     sta bag
+    sta bul_t                       // a bullet in the air is gone
     lda rng
     eor vbl
     bne !+
@@ -3193,6 +3253,19 @@ place_sprites:
     sta sh_en
     lda #0
     sta sh_msb
+    sta sh_xexp
+    sta sh_yexp
+    // the car's paint (flashing in the spray booth)
+    lda car_col
+    ldx paint_t
+    beq !+
+    lda vbl
+    lsr
+    lsr
+    and #7
+    tax
+    lda spray_cols,x
+!:  sta sh_col + 5
     // the car (sprite 5)
     lda car_xl
     sta px_l
@@ -3249,6 +3322,27 @@ place_sprites:
     adc #SP_MAN
     sta sh_ptr + 4
 ps_marker:
+    // a police bullet in flight takes sprite 6 (a white dot)
+    lda bul_t
+    beq ps_mark
+    lda bul_xl
+    sta px_l
+    lda bul_xh
+    sta px_h
+    lda bul_yl
+    sta py_l
+    lda bul_yh
+    sta py_h
+    lda #29
+    sta t4
+    lda #52
+    sta t5
+    ldx #6
+    jsr spr_pos
+    lda #SP_DOT
+    sta sh_ptr + 6
+    jmp ps_arrow
+ps_mark:
     // the marker over the target bank (sprite 6), not during the robbery
     lda pstate
     cmp #ST_ROB
@@ -3326,6 +3420,7 @@ pa_go:
     jmp place_npcs
 
 bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
+spray_cols: .byte 1, 7, 13, 3, 14, 4, 10, 8
 
 // a = direction 0-15 (0 = north, clockwise) of the vector (ax, ay)
 direction16:
