@@ -2,7 +2,7 @@
 // and siren. Imported by boogie.asm.
 //
 // Police cars and cabs drive on the centre lines of the road grid: avenue
-// centres at x = 128 + 256 k (k = 0-3), street centres at y = 64 + 128 j
+// centres at x = 128 + 256 k (k = 0-3), street centres at y = 68 + 128 j
 // (j = 0-7). At every crossing (a "node") they pick a new direction: cabs
 // at random, police towards the player. Five slots, shown with the hardware
 // sprites in slot_spr; sprites 0-3 and 7 are shared with the HUD row at the
@@ -226,7 +226,7 @@ ns_node:
     bne !+
     lda n_yl,x
     and #$7f
-    cmp #$40
+    cmp #$44
     bne !+
     jmp npc_choose
 !:  rts
@@ -238,7 +238,7 @@ npc_choose:
     lda n_yh,x                      // top street: not north
     bne !+
     lda n_yl,x
-    cmp #$40
+    cmp #$44
     bne !+
     lda vmask
     and #%1110
@@ -247,7 +247,7 @@ npc_choose:
     cmp #3
     bne !+
     lda n_yl,x
-    cmp #$c0
+    cmp #$c4
     bne !+
     lda vmask
     and #%1011
@@ -510,9 +510,9 @@ npc_at_node:
     lda t1
     lsr
     sta n_yh,x
-    lda #$40
+    lda #$44
     bcc !+
-    lda #$c0
+    lda #$c4
 !:  sta n_yl,x
     lda #0
     sta n_acc,x

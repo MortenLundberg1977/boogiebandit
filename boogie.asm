@@ -1206,18 +1206,28 @@ do_drive:
     bcc dd_steer
     rts
 dd_steer:
-    // turn rate = 2 x |speed|, at most 3.5 units a frame
+    // turn rate = 1.5 x |speed|, at most 2.5 units a frame (256 = a circle)
     jsr abs_speed
-    asl t0
-    rol t1
     lda t1
-    cmp #3
-    bcc !+
-    lda #3
+    lsr
+    sta t2
+    lda t0
+    ror
+    clc
+    adc t0
+    sta t0
+    lda t2
+    adc t1
     sta t1
+    cmp #2
+    bcc !+
+    bne dd_cap
     lda t0
     cmp #$80
     bcc !+
+dd_cap:
+    lda #2
+    sta t1
     lda #$80
     sta t0
 !:  lda spd_h                       // steering is reversed when backing up

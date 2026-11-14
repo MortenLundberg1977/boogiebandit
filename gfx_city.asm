@@ -63,7 +63,7 @@
 .var SKID_D = one(rows8("b...", "bb..", ".b..", ".bb.", "..b.", "..bb", "...b", "...b"), CL_FREE)   // "\"
 .var AVL = one(rows8("...y", "...y", "...y", "...y", "...y", "...y", "...y", "...y"), CL_FREE)
 .var AVR = one(rows8("y...", "y...", "y...", "y...", "y...", "y...", "y...", "y..."), CL_FREE)
-.var STDASH = one(rows8("....", "....", "....", "....", "....", "....", "wwww", "...."), CL_FREE)
+.var STDASH = one(rows8("....", "....", "....", "....", "wwww", "....", "....", "...."), CL_FREE)   // the middle row of a 5-row street: line at y + 4
 .var ZEB_H = one(rows8("wwww", "wwww", "....", "....", "wwww", "wwww", "....", "...."), CL_FREE)
 .var ZEB_V = one(rows8("ww..", "ww..", "ww..", "ww..", "ww..", "ww..", "ww..", "ww.."), CL_FREE)
 .var MANHOLE = stamp(List().add(
@@ -163,14 +163,15 @@
 }
 
 .var AVX = List().add(13, 45, 77, 109)                     // avenues: 6 columns wide
-.var STY = List()                                           // streets: 4 rows high
+.const SH = 5                                               // streets: 5 rows high
+.var STY = List()
 .for (var j = 0; j < 8; j++) .eval STY.add(6 + 16 * j)
 
 // roads
 .for (var k = 0; k < AVX.size(); k++) .eval mfill(AVX.get(k), 2, 6, 124, ROADCH)
-.for (var j = 0; j < STY.size(); j++) .eval mfill(2, STY.get(j), 124, 4, ROADCH)
+.for (var j = 0; j < STY.size(); j++) .eval mfill(2, STY.get(j), 124, SH, ROADCH)
 .function nearStreet(y) {
-    .for (var j = 0; j < STY.size(); j++) .if (y >= STY.get(j) - 1 && y <= STY.get(j) + 4) .return true
+    .for (var j = 0; j < STY.size(); j++) .if (y >= STY.get(j) - 1 && y <= STY.get(j) + SH) .return true
     .return false
 }
 .function nearAvenue(x) {
@@ -188,24 +189,24 @@
     }
     .for (var j = 0; j < STY.size(); j++) {
         .eval mfill(ax, STY.get(j) - 1, 6, 1, ZEB_V)
-        .eval mfill(ax, STY.get(j) + 4, 6, 1, ZEB_V)
+        .eval mfill(ax, STY.get(j) + SH, 6, 1, ZEB_V)
     }
 }
 .for (var j = 0; j < STY.size(); j++) {
     .var sy = STY.get(j)
     .for (var x = 2; x < 126; x++) {
-        .if (!nearAvenue(x) && mod(floor(x / 2), 2) == 0) .eval mset(x, sy + 1, STDASH)
+        .if (!nearAvenue(x) && mod(floor(x / 2), 2) == 0) .eval mset(x, sy + floor(SH / 2), STDASH)
     }
     .for (var k = 0; k < AVX.size(); k++) {
-        .eval mfill(AVX.get(k) - 1, sy, 1, 4, ZEB_H)
-        .eval mfill(AVX.get(k) + 6, sy, 1, 4, ZEB_H)
+        .eval mfill(AVX.get(k) - 1, sy, 1, SH, ZEB_H)
+        .eval mfill(AVX.get(k) + 6, sy, 1, SH, ZEB_H)
     }
 }
 
 // lots between the roads
 .var LX0 = List().add(2, 19, 51, 83, 115)
 .var LX1 = List().add(12, 44, 76, 108, 125)
-.var LY0 = List().add(2, 10, 26, 42, 58, 74, 90, 106, 122)
+.var LY0 = List().add(2, 11, 27, 43, 59, 75, 91, 107, 123)    // after a street and its crosswalk
 .var LY1 = List().add(5, 21, 37, 53, 69, 85, 101, 117, 125)
 
 .function buildings(bx0, by0, bw, bh) {
@@ -270,11 +271,11 @@
             .eval mfill(bx0, by0, bw, bh, ROADCH)
             .for (var x = bx0; x < bx0 + bw - 2; x = x + 3) {
                 .eval mfill(x, by0, 1, 3, STALL)
-                .eval mfill(x, by0 + bh - 3, 1, 3, STALL)
+                .if (bh >= 8) .eval mfill(x, by0 + bh - 3, 1, 3, STALL)
                 // half the top stalls and a quarter of the bottom ones taken:
                 // room to drive in (same random calls, the city stays the same)
                 .if (rnd(4) >= 2) .eval mstamp(x + 1, by0, cabV)
-                .if (rnd(4) == 0) .eval mstamp(x + 1, by0 + bh - 3, cabV)
+                .if (rnd(4) == 0 && bh >= 8) .eval mstamp(x + 1, by0 + bh - 3, cabV)   // (lots shorter than 8 rows: one row of stalls)
             }
         } else {
             .eval buildings(bx0, by0, bw, bh)
@@ -287,11 +288,11 @@
 .for (var k = 0; k < AVX.size(); k++) {
     .var ax = AVX.get(k)
     .for (var j = 0; j < STY.size() - 1; j++) {
-        .var ys = STY.get(j) + 6
+        .var ys = STY.get(j) + SH + 2
         // never side by side: left curb in the upper half of the block,
         // right curb in the lower half, so a car always fits between them
         .if (rnd(3) != 0) .eval mstamp(ax, ys + rnd(2), cabV)
-        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + 5 + rnd(2), cabV)
+        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + 4 + rnd(2), cabV)
     }
 }
 .for (var n = 0; n < 24; n++) {

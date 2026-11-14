@@ -133,7 +133,9 @@ into the shown screen with their own colour RAM while the camera stands still,
 and the city is restored from the map afterwards.
 
 Police and cabs drive on the centre lines of the road grid (avenue centres
-x = 128 + 256 k, street centres y = 64 + 128 j) and decide at the crossings:
+x = 128 + 256 k, street centres y = 68 + 128 j; avenues are 6 characters
+wide, streets 5 rows high: `AVX`, `STY`, `SH` in gfx_city.asm; change the
+node checks in chase.asm with them) and decide at the crossings:
 cabs at random, police towards the player (longer distance first) and they
 turn around when the player is behind them.
 
