@@ -51,7 +51,11 @@ Two yellow cabs drive around near the player (new ones appear when they get
 far away); they keep to the right of the road, the car bounces off them, and
 a cab that is blocked honks and after a second turns around; driving away
 from a cab you touch is always allowed (only moves towards it bounce). Cabs
-honk on a nudge and now and then on their own. Flooring it from standstill
+honk on a nudge and now and then on their own. Parked cars along the curbs
+and in the two parking lots are yellow cabs, white cars, black cars and black
+ones with yellow stripes (`parkedCars` in gfx_city.asm, picked from the
+position so the rest of the city stays the same; only the colours of the
+city characters are possible). Flooring it from standstill
 (burnout) and sliding at speed leave black tyre marks.
 
 Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar.

@@ -146,6 +146,24 @@
     "........", "........", "..yyyy..", ".yyyyyy.", ".yyyyyy.", ".bbbbbb.", ".bbbbbb.", ".yyyyyy.",
     ".yyyyyy.", ".yywwyy.", ".yyyyyy.", ".yyyyyy.", ".yyyyyy.", ".yyyyyy.", ".yyyyyy.", ".bbbbbb.",
     ".yyyyyy.", ".yyyyyy.", "..yyyy..", "........", "........", "........", "........", "........"), CL_SOLID)
+// other parked cars: the city has one colour RAM value, so they use the
+// colours the characters have: white, black, black with yellow stripes
+.var carW = stamp(List().add(
+    "........", "........", "..wwww..", ".wwwwww.", ".wwwwww.", ".bbbbbb.", ".bbbbbb.", ".wwwwww.",
+    ".wwwwww.", ".wwwwww.", ".wwwwww.", ".wwwwww.", ".wwwwww.", ".bbbbbb.", ".bbbbbb.", ".wwwwww.",
+    ".wwwwww.", ".wwwwww.", "..wwww..", "........", "........", "........", "........", "........"), CL_SOLID)
+.var carB = stamp(List().add(
+    "........", "........", "..bbbb..", ".bbbbbb.", ".bbbbbb.", ".bwwwwb.", ".bwwwwb.", ".bbbbbb.",
+    ".bbbbbb.", ".bbbbbb.", ".bbbbbb.", ".bbbbbb.", ".bbbbbb.", ".bwwwwb.", ".bbbbbb.", ".bbbbbb.",
+    ".bbbbbb.", ".bbbbbb.", "..bbbb..", "........", "........", "........", "........", "........"), CL_SOLID)
+.var carS = stamp(List().add(
+    "........", "........", "..byyb..", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bwwwwb.", ".bbyybb.",
+    ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bbyybb.", ".bbyybb.", "..byyb..",
+    "........", "........", "........", "........", "........", "........", "........", "........"), CL_SOLID)
+.var parkedCars = List().add(cabV, carW, cabV, carB, carW, carS, cabV, carB)
+// which car stands at (x, y): from the position, so no extra random calls
+// (the rest of the city stays the same)
+.function parked(x, y) { .return parkedCars.get(mod(x * 5 + y * 3 + floor(y / 7), parkedCars.size())) }
 
 // ---------------------------------------------------------------- the map
 .const MW = 128
@@ -303,8 +321,8 @@
                 .if (bh >= 8) .eval mfill(x, by0 + bh - 3, 1, 3, STALL)
                 // half the top stalls and a quarter of the bottom ones taken:
                 // room to drive in (same random calls, the city stays the same)
-                .if (rnd(4) >= 2) .eval mstamp(x + 1, by0, cabV)
-                .if (rnd(4) == 0 && bh >= 8) .eval mstamp(x + 1, by0 + bh - 3, cabV)   // (lots shorter than 8 rows: one row of stalls)
+                .if (rnd(4) >= 2) .eval mstamp(x + 1, by0, parked(x, by0))
+                .if (rnd(4) == 0 && bh >= 8) .eval mstamp(x + 1, by0 + bh - 3, parked(x, by0 + bh))   // (lots shorter than 8 rows: one row of stalls)
             }
         } else {
             .eval buildings(bx0, by0, bw, bh)
@@ -314,15 +332,15 @@
     }
 }
 
-// parked cabs along the avenue curbs, manholes on the roads
+// parked cars along the avenue curbs, manholes on the roads
 .for (var k = 0; k < AVX.size(); k++) {
     .var ax = AVX.get(k)
     .for (var j = 0; j < STY.size() - 1; j++) {
         .var ys = STY.get(j) + SH + 2
         // never side by side: left curb in the upper half of the block,
         // right curb in the lower half, so a car always fits between them
-        .if (rnd(3) != 0) .eval mstamp(ax, ys + rnd(2), cabV)
-        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + 4 + rnd(2), cabV)
+        .if (rnd(3) != 0) .eval mstamp(ax, ys + rnd(2), parked(ax, ys))
+        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + 4 + rnd(2), parked(ax + 4, ys + 4))
     }
 }
 .for (var n = 0; n < 24; n++) {
@@ -428,7 +446,7 @@
     .eval mapCode.add(v)
 }
 .eval mapCode.set(WALLCH, 0)
-.for (var y = 0; y < cabV.size(); y++) .for (var x = 0; x < cabV.get(0).size(); x++) .eval mapCode.set(cabV.get(y).get(x), 1)
+.for (var c = 0; c < parkedCars.size(); c++) .for (var y = 0; y < 3; y++) .for (var x = 0; x < 2; x++) .eval mapCode.set(parkedCars.get(c).get(y).get(x), 1)
 // paint garages show yellow on the map: the sign and the booth
 .for (var x = 0; x < 5; x++) .eval mapCode.set(PAINTWORD.get(0).get(x), 3)
 .for (var y = 0; y < 3; y++) .for (var x = 0; x < 4; x++) .eval mapCode.set(paintBay.get(y).get(x), 3)
