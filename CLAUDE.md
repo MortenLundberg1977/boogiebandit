@@ -47,6 +47,23 @@ a life gone, next bank. Three lives (hearts in the HUD); then game over, name
 entry if the score makes the top 5 (kept until the C64 is switched off), and
 the title alternates between the picture and the table.
 
+Targets are 8 banks and 8 card shops (`NBANKS` = 16, `cardLots` in
+gfx_city.asm, targets 8-15: CARDS sign, a playing card, striped awning, loot
+$200-$900; banks $1,000-$4,700). The first target is random (`vbl` xor `rng`
+at game start), then target + 3 of 16. BUSTED! (`impound` in chase.asm): the
+police take the car (`have_car` = 0, the car sprite goes) and the loot of the
+last job (`loot`, taken off the score, the bag goes); the bandit goes on on
+foot from where he was. Fire on foot next to a parked car (3 x 3 characters
+around him, `try_steal`): he steals it. It comes off the map (`put_car`),
+the car stands there facing north in the parked car's colour (`kind_col`:
+cab yellow, white, black, black). During a chase police within 120 pixels
+(`SEE_DIST`) saw it and keep chasing; otherwise all lose the trail
+(`lose_cops`, as after a paint job) and ESCAPED! follows. Stolen cars are
+kept in a list of 32 (`steal_col/row/kind`) and parked again at the next
+game start (the oldest goes back at once when the list is full). Any old car
+of his is left for good (it vanishes). The music runs at 7 frames a 16th
+note, 5 during a chase (`m_speed`).
+
 Two yellow cabs drive around near the player (new ones appear when they get
 far away); they keep to the right of the road, the car bounces off them, and
 a cab that is blocked honks and after a second turns around; driving away
@@ -88,7 +105,9 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
   `job_time` $94 (BCD seconds), `n_type` $3a1 (5 slots: 1 police, 2 cab,
   3 officer, 4 police that lost the trail, 5 roadblock; then x low/high,
   y low/high, direction, 5 bytes each), `jobs` $d4 (poke 2 before a robbery
-  for shooting and roadblocks), `officer` $d7, `bul_t` $da, `car_col` $e1
+  for shooting and roadblocks), `officer` $d7, `bul_t` $da, `car_col` $e1,
+  `have_car` $e8, `loot` $e9, `steal_pos` $f0, `m_speed` $f1 (`target`: 0-7 banks,
+  8-15 card shops)
   (the garage at lot (2,4): car x $0200, y $0244, heading 0, drive up into
   the booth),
   `car_xl`/`car_yl` $24/$27 (+1 high byte), `hdg`/`mang` $2a/$2b, `debug_bar` $1f.
@@ -118,7 +137,7 @@ into characters and de-duplicated.
 
 - `$0200-$02ff` skid-mark ring buffer (128 map addresses), `$0300-$03ff` arrays
   (music, sprite shadows, police/cab slots).
-- `$0801-$79xx` program + data (must stay below $8000; ~1.7 KB free). After it
+- `$0801-$7cxx` program + data (must stay below $8000; ~900 bytes free). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.

@@ -1182,7 +1182,9 @@ new_paint:
     sta score_dirty
     lda #SFX_CHING
     jsr sfx_play
-    ldx #2                          // the police look for a red car...
+    // the police look for a red car...
+lose_cops:
+    ldx #2
 !:  lda n_type,x
     cmp #NT_COP
     bne !+
@@ -1193,6 +1195,42 @@ new_paint:
 !:  dex
     bpl !--
     rts                             // (npc_frame ends the chase: escaped!)
+
+// a car stolen during a chase: police very near the bandit (about 120
+// pixels) saw it and stay after him, otherwise every one loses the trail
+.const SEE_DIST = 120
+steal_seen:
+    lda chase
+    beq sn_rts
+    ldx #2
+sn_loop:
+    lda n_type,x
+    cmp #NT_COP
+    bne sn_next
+    lda #SEE_DIST
+    sta t1
+    lda n_xl,x
+    sec
+    sbc man_xl
+    sta t0
+    lda n_xh,x
+    sbc man_xh
+    jsr small16
+    bcc sn_next
+    lda n_yl,x
+    sec
+    sbc man_yl
+    sta t0
+    lda n_yh,x
+    sbc man_yh
+    jsr small16
+    bcs sn_rts                      // seen
+sn_next:
+    dex
+    bpl sn_loop
+    jmp lose_cops
+sn_rts:
+    rts
 
 // ---------------------------------------------------------------- spawning
 // a = base, t4 = signed offset, t5 = highest node -> a (mirrored if outside)
@@ -1428,6 +1466,7 @@ cb_soft:
 
 // ---------------------------------------------------------------- arrests, timer
 bust:
+    jsr impound
     jsr cops_off
     lda #0
     sta wanted
@@ -1441,6 +1480,54 @@ bust:
     lda #W_BUSTED
     ldx #2
     jmp show_msg
+
+// arrested: the police take the car (he goes on on foot from where he was)
+// and the loot of the last job
+impound:
+    lda state
+    cmp #ST_DRIVE
+    bne !+
+    lda car_xl
+    sta man_xl
+    lda car_xh
+    sta man_xh
+    lda car_yl
+    sta man_yl
+    lda car_yh
+    sta man_yh
+    lda #2
+    sta man_dir
+!:  lda #0
+    sta have_car
+    sta man_anim
+    sta spd_l
+    sta spd_h
+    sta burn
+    sta paint_t
+    lda #ST_WALK
+    sta state
+    lda bag
+    beq im_rts
+    lda #0
+    sta bag
+    sed
+    sec
+    lda score + 1
+    sbc loot
+    sta score + 1
+    lda score + 2
+    sbc #0
+    sta score + 2
+    cld
+    bcs !+
+    lda #0
+    sta score
+    sta score + 1
+    sta score + 2
+!:  lda #1
+    sta score_dirty
+im_rts:
+    rts
 
 // msg_next = 1 if that was the last life
 last_life:

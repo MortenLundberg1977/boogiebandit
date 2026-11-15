@@ -110,6 +110,22 @@
 .var bankDoor = stamp(List().add(
     "yyyyyyyy", "ybbbbbby", "ybbbbbby", "ybbbbbby", "ybbybbby", "ybbbbbby", "ybbbbbby", "yyyyyyyy"), CL_DOOR)
 
+// card shop: white letters on black, a playing card, a striped awning
+.var cardText = List()
+.for (var y = 0; y < 8; y++) {
+    .var s = ""
+    .for (var i = 0; i < 5; i++) .for (var x = 0; x < 4; x++) .eval s = s + ((y >= 1 && fontPix("CARDS".charAt(i), x, y - 1)) ? "w" : "b")
+    .eval cardText.add(s)
+}
+.var CARDWORD = stamp(cardText, CL_SOLID)
+.var cardSign = stamp(List().add(
+    "bbbbbbbb", "bbwwwwbb", "bbwbbwbb", "bbwbbwbb", "bbwbbwbb", "bbwbbwbb", "bbwyywbb", "bbwyywbb",
+    "bbwyywbb", "bbwyywbb", "bbwbbwbb", "bbwbbwbb", "bbwbbwbb", "bbwbbwbb", "bbwwwwbb", "bbbbbbbb"), CL_SOLID)
+.var roofShop = stamp(List().add(
+    "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb",
+    "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb", "bbbbbbbbbbbb",
+    "bbbbbbbbbbbb", "wwwwwwwwwwww", "yywwyywwyyww", "yywwyywwyyww", "yywwyywwyyww", "yywwyywwyyww", "wwwwwwwwwwww", "bbbbbbbbbbbb"), CL_SOLID)
+
 // paint garage: a sign on the roof and an open spray booth at the front
 .var paintText = List()
 .for (var y = 0; y < 8; y++) {
@@ -158,12 +174,27 @@
     ".bbbbbb.", ".bbbbbb.", "..bbbb..", "........", "........", "........", "........", "........"), CL_SOLID)
 .var carS = stamp(List().add(
     "........", "........", "..byyb..", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bwwwwb.", ".bbyybb.",
-    ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bbyybb.", ".bbyybb.", "..byyb..",
-    "........", "........", "........", "........", "........", "........", "........", "........"), CL_SOLID)
+    ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bbyybb.", ".bbyybb.",
+    ".bbyybb.", ".bbyybb.", "..byyb..", "........", "........", "........", "........", "........"), CL_SOLID)
 .var parkedCars = List().add(cabV, carW, cabV, carB, carW, carS, cabV, carB)
 // which car stands at (x, y): from the position, so no extra random calls
 // (the rest of the city stays the same)
 .function parked(x, y) { .return parkedCars.get(mod(x * 5 + y * 3 + floor(y / 7), parkedCars.size())) }
+// for stealing them: the kinds (colour of the stolen car in boogie.asm,
+// kind_col) and per character $80 + kind * 8 + row * 2 + column, else 0
+.var carKinds = List().add(cabV, carW, carB, carS)
+.var parkInfo = List()
+.for (var i = 0; i < 256; i++) .eval parkInfo.add(0)
+.for (var k = 0; k < carKinds.size(); k++) {
+    .for (var r = 0; r < 3; r++) {
+        .for (var c = 0; c < 2; c++) {
+            .var ch = carKinds.get(k).get(r).get(c)
+            .var v = $80 + k * 8 + r * 2 + c
+            .errorif parkInfo.get(ch) != 0 && parkInfo.get(ch) != v, "a parked car character is shared"
+            .eval parkInfo.set(ch, v)
+        }
+    }
+}
 
 // ---------------------------------------------------------------- the map
 .const MW = 128
@@ -261,6 +292,9 @@
                            List().add(3, 4), List().add(2, 6), List().add(1, 7), List().add(3, 7))
 .var parkLots = List().add(List().add(1, 2), List().add(3, 6))
 .var garageLots = List().add(List().add(3, 2), List().add(2, 4), List().add(1, 6))
+// card shops (robbed like banks: targets 8-15, smaller loot)
+.var cardLots = List().add(List().add(2, 1), List().add(1, 3), List().add(3, 5), List().add(2, 7),
+                           List().add(2, 2), List().add(3, 3), List().add(1, 5), List().add(2, 5))
 .var garageX = List()            // middle of the spray booth, world pixels
 .var garageY = List()
 .function isLot(list, kx, ky) {
@@ -269,7 +303,7 @@
 }
 .var bankDoorX = List()          // door centre, world pixels
 .var bankDoorY = List()          // a spot on the sidewalk just below the door
-.for (var i = 0; i < bankLots.size(); i++) {
+.for (var i = 0; i < bankLots.size() + cardLots.size(); i++) {
     .eval bankDoorX.add(0)
     .eval bankDoorY.add(0)
 }
@@ -292,6 +326,7 @@
         .var b = isLot(bankLots, kx, ky)
         .var p = isLot(parkLots, kx, ky)
         .var g = isLot(garageLots, kx, ky)
+        .var cs = isLot(cardLots, kx, ky)
         .if (b >= 0) {
             .var bankx = bx0 + floor((bw - 10) / 2)
             .eval buildings(bx0, by0, bankx - bx0, bh)
@@ -302,6 +337,17 @@
             .eval mstamp(bankx + 4, by0 + bh - 1, bankDoor)
             .eval bankDoorX.set(b, (bankx + 5) * 8)
             .eval bankDoorY.set(b, (by0 + bh) * 8 + 6)
+        } else {
+        .if (cs >= 0) {
+            .var sx = bx0 + floor((bw - 10) / 2)
+            .eval buildings(bx0, by0, sx - bx0, bh)
+            .eval nine(sx, by0, 10, bh, roofShop)
+            .eval buildings(sx + 10, by0, bx1 - sx - 9, bh)
+            .eval mstamp(sx + 2, by0 + 1, CARDWORD)
+            .eval mstamp(sx + 4, by0 + 3, cardSign)
+            .eval mstamp(sx + 4, by0 + bh - 1, bankDoor)
+            .eval bankDoorX.set(bankLots.size() + cs, (sx + 5) * 8)
+            .eval bankDoorY.set(bankLots.size() + cs, (by0 + bh) * 8 + 6)
         } else {
         .if (g >= 0) {
             // a paint garage, the spray booth open to the street below
@@ -326,6 +372,7 @@
             }
         } else {
             .eval buildings(bx0, by0, bw, bh)
+        }
         }
         }
         }

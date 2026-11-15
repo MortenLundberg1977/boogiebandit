@@ -8,7 +8,8 @@
 // and copies it to the SID once a frame; while a sound effect runs, voice 3
 // is left to the effect.
 
-.const SPEED = 6                                // frames per 16th note
+.const SPEED = 7                                // frames per 16th note: calm
+.const SPEED_CHASE = 5                          // and during a police chase
 
 // ---------------------------------------------------------------- instruments
 .const I_BASS = 0
@@ -214,10 +215,15 @@ m_load_pattern:                     // x = voice: next pattern from the order li
     rts
 
 music_play:
+    ldy #SPEED                      // the tune speeds up during a chase
+    lda chase
+    beq !+
+    ldy #SPEED_CHASE
+!:  sty m_speed
     inc m_tick
     lda m_tick
-    cmp #SPEED
-    bne !+
+    cmp m_speed
+    bcc !+
     lda #0
     sta m_tick
 !:  ldx #2
@@ -229,7 +235,9 @@ m_voice:
     jsr m_event
     jmp m_fx
 m_gatecheck:
-    cmp #SPEED - 1
+    clc                             // the last frame of a step
+    adc #1
+    cmp m_speed
     bne m_fx
     lda m_steps,x
     cmp #1

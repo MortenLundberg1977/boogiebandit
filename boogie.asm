@@ -86,6 +86,7 @@
 .const JOB_MIN = $30
 .const START_X = 81 * 8
 .const START_Y = 62 * 8
+.const NSTEAL = 32               // stolen cars remembered (a power of 2)
 
 // ---------------------------------------------------------------- zero page
 .var zpNext = $02
@@ -303,6 +304,16 @@
 .label sh_yexp = zalloc(1)
 .label lv_xexp = zalloc(1)
 .label lv_yexp = zalloc(1)
+.label have_car = zalloc(1)      // 0 after an arrest: the police took the car
+.label loot = zalloc(1)          // the last job's loot, BCD hundreds
+.label st_col = zalloc(1)        // a parked car: top left character, kind
+.label st_row = zalloc(1)
+.label st_kind = zalloc(1)       // ($ff: road, the car is gone)
+.label st_scr = zalloc(1)        // put_car: also draw it on the screen
+.label ts_n = zalloc(1)
+.label ts_m = zalloc(1)
+.label steal_pos = zalloc(1)
+.label m_speed = zalloc(1)        // music: frames per 16th note now (faster in a chase)
 .errorif zpNext > $100, "zero page full"
 .errorif car_yh - car_xf != 5, "car_xf..car_yh must be in a row (save_car)"
 
@@ -1047,6 +1058,34 @@ gs_ring:
     sta block_cd
     sta paint_t
     sta car_col_i
+    sta steal_pos
+    sta st_scr                      // the cars stolen last game are back
+    ldx #NSTEAL - 1                 // (in the map only: it is drawn later)
+gs_steal:
+    lda steal_kind,x
+    bmi !+
+    sta st_kind
+    lda steal_col,x
+    sta st_col
+    lda steal_row,x
+    sta st_row
+    txa
+    pha
+    jsr put_car
+    pla
+    tax
+    lda #$ff
+    sta steal_kind,x
+!:  dex
+    bpl gs_steal
+    lda #1
+    sta have_car
+    sta st_scr
+    lda vbl                         // the first bank: from how long the
+    eor rng                         // title was shown
+    and #NBANKS - 1
+    sta target
+    lda #0
     ldx #NNPC - 1
 !:  sta n_type,x
     sta n_cur,x
@@ -2043,6 +2082,8 @@ do_walk:
     and #$10
     beq dw_move
     // fire next to the car: get in
+    lda have_car
+    beq dw_steal
     lda man_xl
     sec
     sbc car_xl
@@ -2050,7 +2091,7 @@ do_walk:
     lda man_xh
     sbc car_xh
     jsr near18
-    bcc dw_move
+    bcc dw_steal
     lda man_yl
     sec
     sbc car_yl
@@ -2058,11 +2099,15 @@ do_walk:
     lda man_yh
     sbc car_yh
     jsr near18
-    bcc dw_move
+    bcc dw_steal
     lda #ST_DRIVE
     sta state
     lda #SFX_DOOR
     jsr sfx_play
+    rts
+dw_steal:
+    jsr try_steal                   // or next to a parked car: steal it
+    bcc dw_move
     rts
 dw_move:
     lda #3
@@ -2149,6 +2194,217 @@ dw_move:
 dw_done:
     rts
 
+
+// ---------------------------------------------------------------- car theft
+// fire on foot with a parked car in the 3 x 3 characters around the bandit:
+// he steals it (his own car, if any, is left for good). Carry set if he did.
+try_steal:
+    lda man_xl
+    sta t3
+    lda man_xh
+    lsr
+    ror t3
+    lsr
+    ror t3
+    lsr
+    ror t3
+    dec t3                          // t3 = first column
+    lda man_yl
+    sta st_row
+    lda man_yh
+    lsr
+    ror st_row
+    lsr
+    ror st_row
+    lsr
+    ror st_row
+    dec st_row
+    lda #3
+    sta ts_n
+ts_row:
+    ldx st_row
+    lda mrow_lo,x
+    sta zp0
+    lda mrow_hi,x
+    sta zp0 + 1
+    ldy t3
+    lda #3
+    sta ts_m
+ts_col:
+    lda (zp0),y
+    tax
+    lda park_tab,x
+    bne ts_found
+    iny
+    dec ts_m
+    bne ts_col
+    inc st_row
+    dec ts_n
+    bne ts_row
+    clc
+    rts
+ts_found:                           // a = $80 + kind * 8 + row * 2 + column
+    sta t1
+    and #1
+    sta t2
+    tya
+    sec
+    sbc t2
+    sta st_col
+    lda t1
+    lsr
+    and #3
+    sta t2
+    lda st_row
+    sec
+    sbc t2
+    sta st_row
+    lda t1
+    lsr
+    lsr
+    lsr
+    and #3
+    sta st_kind
+    // remember it (it is parked there again next game); when the list is
+    // full the oldest one comes back now
+    ldx steal_pos
+    lda steal_kind,x
+    bmi !+
+    lda st_col
+    pha
+    lda st_row
+    pha
+    lda st_kind
+    pha
+    lda steal_col,x
+    sta st_col
+    lda steal_row,x
+    sta st_row
+    lda steal_kind,x
+    sta st_kind
+    jsr put_car
+    pla
+    sta st_kind
+    pla
+    sta st_row
+    pla
+    sta st_col
+    ldx steal_pos
+!:  lda st_col
+    sta steal_col,x
+    lda st_row
+    sta steal_row,x
+    lda st_kind
+    sta steal_kind,x
+    pha
+    inx
+    txa
+    and #NSTEAL - 1
+    sta steal_pos
+    lda #$ff                        // off the street
+    sta st_kind
+    jsr put_car
+    pla
+    tax
+    lda kind_col,x
+    sta car_col
+    // the car stands where the parked one was, facing north
+    lda #0
+    sta car_xh
+    lda st_col                      // x = column * 8 + 8
+    asl
+    rol car_xh
+    asl
+    rol car_xh
+    asl
+    rol car_xh
+    clc
+    adc #8
+    sta car_xl
+    lda car_xh
+    adc #0
+    sta car_xh
+    lda #0
+    sta car_yh
+    lda st_row                      // y = row * 8 + 10
+    asl
+    rol car_yh
+    asl
+    rol car_yh
+    asl
+    rol car_yh
+    clc
+    adc #10
+    sta car_yl
+    lda car_yh
+    adc #0
+    sta car_yh
+    lda #0
+    sta car_xf
+    sta car_yf
+    sta hdg
+    sta hdg_f
+    sta mang
+    sta car_frame
+    sta spd_l
+    sta spd_h
+    sta vx_l
+    sta vx_h
+    sta vy_l
+    sta vy_h
+    sta burn
+    sta paint_t
+    lda #1
+    sta have_car
+    lda #ST_DRIVE
+    sta state
+    lda #SFX_DOOR
+    jsr sfx_play
+    jsr steal_seen                  // did the police see it?
+    sec
+    rts
+
+// put parked car st_kind ($ff: road) at st_col/st_row into the map, and on
+// the screen if st_scr
+put_car:
+    lda #0
+    sta ts_n
+pk_loop:
+    lda ts_n
+    lsr
+    clc
+    adc st_row
+    sta mrow
+    lda ts_n
+    and #1
+    clc
+    adc st_col
+    sta mcol
+    lda #ROADCH
+    ldx st_kind
+    bmi !+
+    lda kind6,x
+    clc
+    adc ts_n
+    tax
+    lda park_chars,x
+!:  pha
+    ldx mrow
+    lda mrow_lo,x
+    sta zp0
+    lda mrow_hi,x
+    sta zp0 + 1
+    ldy mcol
+    pla
+    sta (zp0),y
+    ldx st_scr
+    beq !+
+    jsr screen_cell
+!:  inc ts_n
+    lda ts_n
+    cmp #6
+    bne pk_loop
+    rts
 // carry set if the 16-bit difference (a = high, t0 = low) is within -17..17
 near18:
     cmp #0
@@ -2273,7 +2529,16 @@ end_rob:
     sta man_dir
     lda #1
     sta bag
-    // the loot: $1,000-$4,700, BCD
+    // the loot: a bank $1,000-$4,700, a card shop $200-$900 (BCD)
+    lda target
+    cmp #8
+    bcc er_bank
+    jsr rng_next
+    and #$07
+    clc
+    adc #2
+    bne er_loot                     // (always)
+er_bank:
     jsr rng_next
     and #$03
     clc
@@ -2288,6 +2553,8 @@ end_rob:
     lsr
     and #$07
     ora t0
+er_loot:
+    sta loot
     sed
     clc
     adc score + 1
@@ -3266,7 +3533,9 @@ place_sprites:
     tax
     lda spray_cols,x
 !:  sta sh_col + 5
-    // the car (sprite 5)
+    // the car (sprite 5), unless the police took it
+    lda have_car
+    beq ps_nocar
     lda car_xl
     sta px_l
     lda car_xh
@@ -3285,6 +3554,7 @@ place_sprites:
     clc
     adc #SP_CAR
     sta sh_ptr + 5
+ps_nocar:
     // the bandit (sprite 4)
     lda pstate
     cmp #ST_WALK
@@ -3778,6 +4048,13 @@ gl_bl:      .fill glBL.size(), glBL.get(i)
 gl_br:      .fill glBR.size(), glBR.get(i)
 sqr_lo:     .fill 512, <floor(i * i / 4)
 sqr_hi:     .fill 512, >floor(i * i / 4)
+park_tab:   .fill 256, parkInfo.get(i)
+park_chars: .fill 24, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
+kind6:      .byte 0, 6, 12, 18
+kind_col:   .byte 7, 1, 0, 0        // stolen cab yellow, white car, black cars
+steal_col:  .fill NSTEAL, 0         // stolen cars, put back at the next game
+steal_row:  .fill NSTEAL, 0
+steal_kind: .fill NSTEAL, $ff
 
 
 .var mapPacked = rlePack(cityMap)

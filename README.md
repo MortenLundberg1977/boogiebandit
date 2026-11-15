@@ -14,10 +14,17 @@ shown top left.
 
 ## How to play
 
-- Every job has a timer (top, next to the fps). Rob the bank before it runs
+- Every job has a timer (top, next to the fps). Rob the place before it runs
   out, or that job is off and you lose a heart.
 - Each robbery adds a wanted star, and that many police cars come after you.
   Lose them all and you get a $500 bonus. If one catches you, you're BUSTED!
+- Rob banks and card shops (CARDS sign with a playing card; a smaller take
+  of $200-$900). The first target is different each game.
+- If one catches you, you're BUSTED!: the police keep your car and the loot
+  of the last job, and you go on on foot.
+- Steal a parked car: walk up to one and press fire. During a chase, the
+  police only notice if one of them is very close; otherwise they lose your
+  trail. Stolen cars are back in their spots next game.
 - The police get tougher with every bank you rob. The first chase is a single
   slow car. After that, officers stop, get out and shoot (dodge the bullets
   or duck behind a building), and from the third job on they set up
@@ -35,7 +42,7 @@ shown top left.
 |---|---|
 | Up / down | accelerate / brake and reverse |
 | Left / right | steer (on foot: walk) |
-| Fire | get out of the car (nearly stopped), get back in (next to it) |
+| Fire | get out of the car (nearly stopped), get back in (next to it), steal a parked car (next to it) |
 | SPACE | city map (fire or SPACE to drive on) |
 | M | music on / off |
 | D | raster time bar in the border (CPU time of each frame) |
