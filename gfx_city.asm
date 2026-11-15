@@ -384,10 +384,10 @@
     .var ax = AVX.get(k)
     .for (var j = 0; j < STY.size() - 1; j++) {
         .var ys = STY.get(j) + SH + 2
-        // never side by side: left curb in the upper half of the block,
-        // right curb in the lower half, so a car always fits between them
-        .if (rnd(3) != 0) .eval mstamp(ax, ys + rnd(2), parked(ax, ys))
-        .if (rnd(3) != 0) .eval mstamp(ax + 4, ys + 4 + rnd(2), parked(ax + 4, ys + 4))
+        // at most one per block, on one side: never one on each side
+        .var side = rnd(5)
+        .if (side < 2) .eval mstamp(ax, ys + 1 + rnd(3), parked(ax, ys))
+        .if (side == 2 || side == 3) .eval mstamp(ax + 4, ys + 1 + rnd(3), parked(ax + 4, ys + 4))
     }
 }
 .for (var n = 0; n < 24; n++) {

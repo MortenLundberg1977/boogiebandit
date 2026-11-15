@@ -61,8 +61,12 @@ cab yellow, white, black, black). During a chase police within 120 pixels
 (`lose_cops`, as after a paint job) and ESCAPED! follows. Stolen cars are
 kept in a list of 32 (`steal_col/row/kind`) and parked again at the next
 game start (the oldest goes back at once when the list is full). Any old car
-of his is left for good (it vanishes). The music runs at 7 frames a 16th
-note, 5 during a chase (`m_speed`).
+of his is left for good (it vanishes). Parked cars: at most one per block
+along an avenue, on one side. The music runs at 7 frames a 16th
+note; during a chase the chase tune "Hot Pursuit" plays at 5 (`m_song`,
+`m_speed`; its driving part, bass and drums, is on voice 3, since the siren
+and the engine take voices 1 and 2). The title picture says "MADE IN 2026 BY
+MORTEN" on the bottom sidewalk.
 
 Two yellow cabs drive around near the player (new ones appear when they get
 far away); they keep to the right of the road, the car bounces off them, and
@@ -106,7 +110,8 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
   3 officer, 4 police that lost the trail, 5 roadblock; then x low/high,
   y low/high, direction, 5 bytes each), `jobs` $d4 (poke 2 before a robbery
   for shooting and roadblocks), `officer` $d7, `bul_t` $da, `car_col` $e1,
-  `have_car` $e8, `loot` $e9, `steal_pos` $f0, `m_speed` $f1 (`target`: 0-7 banks,
+  `have_car` $e8, `loot` $e9, `steal_pos` $f0, `m_speed` $f1, `m_song` $f6,
+  `n_next`/`n_prev`/`n_rot` $3d3/$3d8/$3dd (`target`: 0-7 banks,
   8-15 card shops)
   (the garage at lot (2,4): car x $0200, y $0244, heading 0, drive up into
   the booth),
@@ -137,13 +142,18 @@ into characters and de-duplicated.
 
 - `$0200-$02ff` skid-mark ring buffer (128 map addresses), `$0300-$03ff` arrays
   (music, sprite shadows, police/cab slots).
-- `$0801-$7cxx` program + data (must stay below $8000; ~900 bytes free). After it
+- `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
+  `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
+  `$0700-$07ff` the chase tune (both copied there from the start-up data).
+- `$0801-$7fxx` program + data (must stay below $8000; under 100 bytes free:
+  put new data in the start-up area and copy it out, as for $0400). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
+  `$f800` police sprites 224-235 (after the B->A shift, which ends at $f771),
   `$e000` bitmap for the title pages, game over and the city map (colours in
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
@@ -189,6 +199,14 @@ wide, streets 5 rows high: `AVX`, `STY`, `SH` in gfx_city.asm; change the
 node checks in chase.asm with them) and decide at the crossings:
 cabs at random, police towards the player (longer distance first) and they
 turn around when the player is behind them.
+Turning: police cars and cabs choose their way 16 pixels before a crossing
+(`TURN_R`, `npc_plan`; they slow down there) and are shown on a quarter
+circle from 16 pixels before to 16 after it, turning in 16 steps
+(`npc_view`: `arc_a`/`arc_b`/`hstep`; cabs keep their lane with `lane16x/y`).
+A U-turn turns on the spot in 8 steps (`n_rot`). Only the picture curves:
+the real position (for collisions) stays on the centre lines, at most about
+5 pixels away. Police use 16 sprites (4 at $c800, 12 at $f800: `cop_ptr`),
+cabs the getaway car's 16.
 
 Measured worst case (3 police cars, 2 cabs, skid marks, hard turning):
 `perf_max` ≈ $8a = 138 of 156; plain driving ≈ $6b; 2 police cars, an

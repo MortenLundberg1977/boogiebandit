@@ -5,7 +5,8 @@
 A top-down getaway game for the Commodore 64 (PAL), written in 6502 assembly
 for KickAssembler. Drive a 70s sedan through a smooth-scrolling city, park at
 the bank the arrow points to, hop out, pull the job (KAPOW! ZOWIE! KACHING!),
-and get back to the car before the police arrive. Runs at 50 frames a second,
+and get back to the car before the police arrive (with its own chase tune).
+Runs at 50 frames a second,
 shown top left.
 
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
@@ -66,3 +67,5 @@ that take .t64), and starts VICE. On a real C64 from the disk:
 
 All graphics, the title picture, the fonts and the music are generated at
 build time from the sources; there are no binary assets.
+
+Made in 2026 by Morten.

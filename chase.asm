@@ -198,6 +198,7 @@ nc_wait:
     lda n_dir,x
     eor #2
     sta n_dir,x
+    jsr npc_flip
 !:  rts
 no_respawn:
     lda n_type,x
@@ -232,6 +233,7 @@ no_cop:
     lda n_dir,x
     cmp odir
     beq no_move
+    jsr npc_flip
     lda #0
     sta n_cur,x
     jmp no_move
@@ -306,15 +308,73 @@ ns_n:
     dec n_yh,x
 !:  dec n_yl,x
 ns_node:
+    ldy n_dir,x                     // TURN_R pixels before a crossing?
     lda n_xl,x
-    cmp #$80
-    bne !+
+    cmp pre_x,y
+    bne ns_at
+    lda n_yl,x
+    and #$7f
+    cmp pre_y,y
+    bne ns_at
+    jmp npc_plan
+ns_at:
+    lda n_xl,x                      // at the crossing: take the way planned
+    cmp #$80                        // (or choose now)
+    bne ns_rts
     lda n_yl,x
     and #$7f
     cmp #$44
-    bne !+
+    bne ns_rts
+    lda n_dir,x
+    sta n_prev,x
+    lda n_next,x
+    bmi ns_choose
+    sta n_dir,x
+    lda #$ff
+    sta n_next,x
+ns_rts:
+    rts
+ns_choose:
     jmp npc_choose
-!:  rts
+
+// TURN_R pixels before a crossing: choose the way there now (as if at the
+// crossing), so the car slows down in time and curves through it
+.const TURN_R = 16
+pre_x:      .byte $80, $80 - TURN_R, $80, $80 + TURN_R
+pre_y:      .byte $44 + TURN_R, $44, $44 - TURN_R, $44
+npc_plan:
+    lda n_dir,x
+    pha
+    lda n_xl,x
+    pha
+    lda n_yl,x
+    pha
+    lda #$80
+    sta n_xl,x
+    lda n_yl,x
+    and #$80
+    ora #$44
+    sta n_yl,x
+    jsr npc_choose
+    lda n_dir,x
+    sta n_next,x
+    pla
+    sta n_yl,x
+    pla
+    sta n_xl,x
+    pla
+    sta n_dir,x
+    rts
+
+// turned around between crossings: on the spot, in 8 steps
+npc_flip:
+    lda #8
+    sta n_rot,x
+    lda n_dir,x
+    sta n_prev,x
+    lda #$ff
+    sta n_next,x
+    rts
 
 // at a crossing: valid directions, then the cab's or the cop's choice
 npc_choose:
@@ -1278,7 +1338,14 @@ npc_at_node:
     lda #4                          // no previous direction
     sta n_dir,x
     jsr npc_delta
-    jmp npc_choose
+    jsr npc_choose
+    lda n_dir,x                     // no curve, no turn planned
+    sta n_prev,x
+    lda #$ff
+    sta n_next,x
+    lda #0
+    sta n_rot,x
+    rts
 
 // a cab two streets above or below the player, one avenue left or right
 spawn_cab:
@@ -1806,13 +1873,13 @@ pn_show:
     lda n_type,x
     cmp #NT_CAB                     // cabs: in their lane
     bne pn_off
-    ldy n_dir,x
-    lda lane_x,y
+    jsr npc_view
+    ldy vh
+    lda lane16x,y
     ldy #px_l
     jsr add_lane
-    ldx ni
-    ldy n_dir,x
-    lda lane_y,y
+    ldy vh
+    lda lane16y,y
     ldy #py_l
     jsr add_lane
     jmp pn_pos
@@ -1824,7 +1891,10 @@ pn_off:
     bne pn_pos
 pn_blk:
     cmp #NT_BLOCK                   // a roadblock is stretched across
-    bne pn_pos
+    beq !+
+    jsr npc_view                    // a police car: curves through crossings
+    jmp pn_pos
+!:
     lda n_dir,x
     beq !+
     lda #7
@@ -1853,13 +1923,17 @@ pn_ok:
     beq pn_cab
     cmp #NT_OFF
     beq pn_man
-    lda n_dir,y                     // police car, lights flashing
-    clc
-    adc #SP_COP
+    ldy vh                          // police car, lights flashing
+    lda cop_ptr,y
     sta sh_ptr,x
+    ldy ni
     lda n_type,y
     cmp #NT_BLOCK
     bne pn_light
+    lda n_dir,y                     // (a roadblock: 4 directions only)
+    clc
+    adc #SP_COP
+    sta sh_ptr,x
     lda n_dir,y
     php
     lda bit_tab,x
@@ -1888,9 +1962,8 @@ pn_man:
     sta sh_col,x
     jmp pn_next
 pn_cab:
-    lda n_dir,y
-    asl
-    asl
+    lda vh
+    clc
     adc #SP_CAR
     sta sh_ptr,x
     lda #7
@@ -1903,6 +1976,159 @@ pn_next:
 !:  rts
 
 // add signed a to the 16-bit zero page value at y
+
+// slot x (= ni): the shown position (px/py, already the real one) and
+// heading vh (0-15). Through a crossing where it turns a car follows a
+// quarter circle from TURN_R pixels before to TURN_R after it; a U-turn
+// turns on the spot (n_rot steps left, one every 2 frames).
+npc_view:
+    lda n_dir,x
+    asl
+    asl
+    sta vh
+    lda n_rot,x
+    beq nv_s
+    lda vbl
+    and #1
+    beq !+
+    dec n_rot,x
+!:  lda vh
+    sec
+    sbc n_rot,x
+    and #15
+    sta vh
+    rts
+nv_s:
+    ldy n_dir,x                     // s: signed distance past the crossing
+    lda n_yl,x
+    and #$80
+    ora #$44
+    sta t0                          // the crossing's y (low byte)
+    tya
+    beq nv_n
+    cmp #2
+    beq nv_so
+    bcc nv_e
+    lda #$80                        // west
+    sec
+    sbc n_xl,x
+    jmp nv_have
+nv_e:
+    lda n_xl,x
+    sec
+    sbc #$80
+    jmp nv_have
+nv_n:
+    lda t0
+    sec
+    sbc n_yl,x
+    jmp nv_have
+nv_so:
+    lda n_yl,x
+    sec
+    sbc t0
+nv_have:
+    bmi nv_before
+    cmp #TURN_R + 1                 // after it: from n_prev to n_dir
+    bcs nv_rts
+    adc #TURN_R
+    sta vk
+    lda n_prev,x
+    sta va
+    lda n_dir,x
+    sta vb
+    jmp nv_turn
+nv_before:
+    cmp #256 - TURN_R               // before it: from n_dir to n_next
+    bcc nv_rts
+    clc
+    adc #TURN_R
+    sta vk
+    lda n_dir,x
+    sta va
+    lda n_next,x
+    sta vb
+nv_turn:
+    lda vb
+    bmi nv_rts                      // nothing planned
+    eor va
+    beq nv_rts                      // straight on
+    cmp #2
+    beq nv_rts                      // (turning around)
+    lda va
+    asl
+    asl
+    sta vh
+    ldy vk
+    lda va                          // right turn: b = a + 1
+    clc
+    adc #1
+    and #3
+    cmp vb
+    beq !+
+    lda vh
+    sec
+    sbc hstep,y
+    jmp nv_h
+!:  lda vh
+    clc
+    adc hstep,y
+nv_h:
+    and #15
+    sta vh
+    lda #$80                        // the crossing, then along the curve
+    sta px_l
+    lda n_xh,x
+    sta px_h
+    lda t0
+    sta py_l
+    lda n_yh,x
+    sta py_h
+    ldy vk
+    lda arc_a,y
+    ldy va
+    jsr add_dir
+    ldy vk
+    lda arc_b,y
+    ldy vb
+    jsr add_dir
+    ldx ni
+nv_rts:
+    rts
+
+// px/py += a (signed) pixels in direction y
+add_dir:
+    cpy #1
+    beq ad_x
+    cpy #2
+    beq ad_y
+    eor #$ff                        // north / west: the other way
+    clc
+    adc #1
+    cpy #0
+    beq ad_y
+ad_x:
+    ldy #px_l
+    jmp add_lane
+ad_y:
+    ldy #py_l
+    jmp add_lane
+
+// the curve: k = 0-32 (s + TURN_R), along the old way (a) and the new (b)
+.var arcA = List()
+.var arcB = List()
+.for (var k = 0; k <= 2 * 16; k++) {
+    .var f = k * PI / 64
+    .eval arcA.add(round(16 * (sin(f) - 1)))
+    .eval arcB.add(round(16 * (1 - cos(f))))
+}
+arc_a:      .fill 33, arcA.get(i) & 255
+arc_b:      .fill 33, arcB.get(i) & 255
+hstep:      .fill 33, round(i / 8)
+// a cab keeps to the right of its road, also while turning
+lane16x:    .fill 16, round(6 * cos(i * PI / 8)) & 255
+lane16y:    .fill 16, round(6 * sin(i * PI / 8)) & 255
+cop_ptr:    .fill 16, copPtr.get(i)
 add_lane:
     cmp #0
     beq al_done

@@ -152,8 +152,39 @@
 .var ord2 = order("R R    L1 L2 L3 L4  L1 L2 L3 L4  S1 S2 S3 S4  C1 C2 C3 C4", 2)
 .var ord3 = order("dI dI  dA dA dA dB  dA dA dA dB  dA dA dA dB  dA dA dA dB", 2)
 
+// ---------------------------------------------------------------- the chase tune
+// "Hot Pursuit": faster, minor stabs. During a chase the siren has voice 1
+// and the engine voice 2, so the driving part (bass with the drums mixed
+// in) is on voice 3. Its data is kept at MUSSTORE ($0700, copied there at
+// start-up) to save room in the program.
+.var FIRST_CHASE = patterns.size()
+.eval pat("cA", I_BASS, "K A1 h A2 S A1 h A2 K A1 h C3 S A2 h G2")
+.eval pat("cF", I_BASS, "K F1 h F2 S F1 h F2 K F1 h A2 S F2 h E2")
+.eval pat("cE", I_BASS, "K E1 h E2 S E1 h E2 K E1 h G#2 S E2 S S")
+.eval pat("cL1", I_STAB, "A4 - A4 - C5 - A4 - E5 - D5 - C5 - B4 -")
+.eval pat("cL2", I_STAB, "A4 - A4 - C5 - A4 - G5 - F5 - E5 - D5 -")
+.eval pat("cL3", I_LEAD, "E5 . . . D5 . . . C5 . . . B4 . G#4 .")
+.var cord1 = order("R", 0)
+.var cord2 = order("cL1 cL2 cL1 cL3", 0)
+.var cord3 = order("cA cA cF cE", 0)
+
 // ---------------------------------------------------------------- player code
 music_init:
+    lda #0
+    sta m_song
+    jsr music_song
+    ldx #20
+    lda #0
+!:  sta sid_sh,x
+    sta $d400,x
+    dex
+    bpl !-
+    lda #$0f
+    sta $d418
+    rts
+
+// start song m_song (0 the tune, 1 the chase tune) from the top
+music_song:
     ldx #2
 !:  lda #0
     sta m_ord,x
@@ -164,16 +195,8 @@ music_init:
     jsr m_load_pattern
     dex
     bpl !-
-    lda #SPEED - 1
+    lda #$ff                        // the first step on the next frame
     sta m_tick
-    ldx #20
-    lda #0
-!:  sta sid_sh,x
-    sta $d400,x
-    dex
-    bpl !-
-    lda #$0f
-    sta $d418
     rts
 
 // silence all voices (music off)
@@ -193,9 +216,15 @@ music_mute:
 !:  rts
 
 m_load_pattern:                     // x = voice: next pattern from the order list
-    lda ord_lo,x
+    txa
+    ldy m_song
+    beq !+
+    clc
+    adc #3
+!:  tay
+    lda ord_lo,y
     sta mzp
-    lda ord_hi,x
+    lda ord_hi,y
     sta mzp + 1
     ldy m_ord,x
     lda (mzp),y
@@ -215,11 +244,17 @@ m_load_pattern:                     // x = voice: next pattern from the order li
     rts
 
 music_play:
-    ldy #SPEED                      // the tune speeds up during a chase
+    ldy #SPEED                      // a chase: the chase tune, faster
     lda chase
     beq !+
     ldy #SPEED_CHASE
+    lda #1
 !:  sty m_speed
+    cmp m_song
+    beq !+
+    sta m_song
+    jsr music_song
+!:
     inc m_tick
     lda m_tick
     cmp m_speed
@@ -488,8 +523,17 @@ sfx_step:  .byte $00, $a2, $81, $18, $81, $14, $81, $10, $80, $0c, 0    // a hee
 
 // ---------------------------------------------------------------- player data
 sidoff: .byte 0, 7, 14
-ord_lo: .byte <ord1_data, <ord2_data, <ord3_data
-ord_hi: .byte >ord1_data, >ord2_data, >ord3_data
+// order lists: the tune (song 0), then the chase tune (song 1, at MUSSTORE)
+.var musStore = List()
+.for (var i = 0; i < 3; i++) {
+    .var o = (i == 0) ? cord1 : ((i == 1) ? cord2 : cord3)
+    .for (var j = 0; j < o.size(); j++) .eval musStore.add(o.get(j))
+}
+.const CORD1 = MUSSTORE
+.const CORD2 = CORD1 + cord1.size()
+.const CORD3 = CORD2 + cord2.size()
+ord_lo: .byte <ord1_data, <ord2_data, <ord3_data, <CORD1, <CORD2, <CORD3
+ord_hi: .byte >ord1_data, >ord2_data, >ord3_data, >CORD1, >CORD2, >CORD3
 ord1_data: .fill ord1.size(), ord1.get(i)
 ord2_data: .fill ord2.size(), ord2.get(i)
 ord3_data: .fill ord3.size(), ord3.get(i)
@@ -512,9 +556,16 @@ freq_hi: .fill 96, >freqReg(i)
 .var patOffs = List()
 .var patAll = List()
 .for (var p = 0; p < patterns.size(); p++) {
-    .eval patOffs.add(patAll.size())
-    .for (var i = 0; i < patterns.get(p).size(); i++) .eval patAll.add(patterns.get(p).get(i))
+    .if (p < FIRST_CHASE) {
+        .eval patOffs.add(patAll.size())
+        .for (var i = 0; i < patterns.get(p).size(); i++) .eval patAll.add(patterns.get(p).get(i))
+    } else {
+        .eval patOffs.add(MUSSTORE + musStore.size())
+        .for (var i = 0; i < patterns.get(p).size(); i++) .eval musStore.add(patterns.get(p).get(i))
+    }
 }
+.errorif musStore.size() > 256, "the chase tune is too long for MUSSTORE: " + musStore.size()
+.print "Chase tune: " + musStore.size() + " bytes at MUSSTORE"
 pat_data: .fill patAll.size(), patAll.get(i)
-pat_lo: .fill patterns.size(), <(pat_data + patOffs.get(i))
-pat_hi: .fill patterns.size(), >(pat_data + patOffs.get(i))
+pat_lo: .fill patterns.size(), (i < FIRST_CHASE) ? <(pat_data + patOffs.get(i)) : <patOffs.get(i)
+pat_hi: .fill patterns.size(), (i < FIRST_CHASE) ? >(pat_data + patOffs.get(i)) : >patOffs.get(i)

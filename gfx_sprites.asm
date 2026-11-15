@@ -44,28 +44,30 @@
 }
 
 // ---------------------------------------------------------------- the getaway car
-// A 70s sedan with a vinyl roof, nose up (heading 0 = north).
+// A 70s sedan, nose up (heading 0 = north): chrome bumpers, headlights,
+// long hood, wide windscreen, side mirrors, vinyl roof, rear window, wheels
+// sticking out a little.
 .var carArt = List().add(
-    "..wccccccw..",
-    ".cccccccccc.",
+    "..wwwwwwww..",
+    ".wccccccccw.",
     "kcccccccccck",
     "kcccccccccck",
     "kcccccccccck",
     ".cccccccccc.",
-    ".ckwwwwwwkc.",
-    ".ckwwwwwwkc.",
-    ".cckkkkkkcc.",
-    ".cckkkkkkcc.",
-    ".cckkkkkkcc.",
-    ".cckkkkkkcc.",
-    ".ckwwwwwwkc.",
+    ".ccwwwwwwcc.",
+    "wcwwwwwwwwcw",
+    ".ckkkkkkkkc.",
+    ".ckkkkkkkkc.",
+    ".ckkkkkkkkc.",
+    ".ckkkkkkkkc.",
+    ".ckkkkkkkkc.",
+    ".cwwwwwwwwc.",
     ".cccccccccc.",
     "kcccccccccck",
     "kcccccccccck",
     "kcccccccccck",
-    ".cccccccccc.",
-    ".cccccccccc.",
-    "..kcccccck..")
+    ".kcccccccck.",
+    "..wwwwwwww..")
 .var sprHi = List()
 .for (var f = 0; f < 16; f++) {
     .var d = rotSprite(carArt, f * 22.5)
@@ -264,6 +266,20 @@
     ".wwwwwwwwww.",
     "..kwwwwwwk..")
 .for (var d = 0; d < 4; d++) .eval addSprite(rotSprite(copArt, d * 90))
+// the police car between those (12 more directions, for turning), kept at
+// $0400 and copied to $f800 (sprites 224-235) whenever the city comes
+// back from a bitmap screen
+.var copRot = List()
+.var copPtr = List()
+.for (var f = 0; f < 16; f++) {
+    .if (mod(f, 4) == 0) {
+        .eval copPtr.add(58 + f / 4)
+    } else {
+        .eval copPtr.add(224 + copRot.size() / 64)
+        .var d = rotSprite(copArt, f * 22.5)
+        .for (var i = 0; i < 64; i++) .eval copRot.add(d.get(i))
+    }
+}
 // 62: a 4 x 4 dot, 63: an 8 x 8 ring (hi-res, for the city map)
 .var dotSpr = List()
 .for (var y = 0; y < 21; y++) .eval dotSpr.add((y < 4) ? $f0 : 0, 0, 0)
@@ -285,6 +301,7 @@
 .const SP_TIME = 56
 .const SP_LIVES = 57
 .const SP_COP = 58              // + direction 0-3 (N E S W)
+// police car heading 0-15 -> sprite pointer: cop_ptr (boogie.asm tables)
 .const SP_DOT = 62
 .const SP_RING = 63
 

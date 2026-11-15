@@ -29,6 +29,9 @@
 .const CHARSET = $d000
 .const SPRHI = $d800
 .const BITMAP = $e000
+.const COPSPR = $f800            // police car sprites 224-239 (after the B->A shift)
+.const COPSTORE = $0400          // their copy, 12 sprites (the bitmap screens overwrite $f800)
+.const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
 .const MAP = $8000
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -314,6 +317,11 @@
 .label ts_m = zalloc(1)
 .label steal_pos = zalloc(1)
 .label m_speed = zalloc(1)        // music: frames per 16th note now (faster in a chase)
+.label vh = zalloc(1)             // npc_view: heading 0-15, curve step, old/new way
+.label vk = zalloc(1)
+.label va = zalloc(1)
+.label vb = zalloc(1)
+.label m_song = zalloc(1)         // music: 0 the tune, 1 the chase tune
 .errorif zpNext > $100, "zero page full"
 .errorif car_yh - car_xf != 5, "car_xf..car_yh must be in a row (save_car)"
 
@@ -358,6 +366,9 @@
 .label n_spd = balloc(5)
 .label n_wait = balloc(5)          // cabs: frames blocked; police: frames the officer stays out
 .label n_cur = balloc(5)           // speed now (speeds up to n_spd)
+.label n_next = balloc(5)          // the way planned at the next crossing ($ff: none)
+.label n_prev = balloc(5)          // the way before the last crossing
+.label n_rot = balloc(5)           // U-turn steps still to show
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -414,6 +425,25 @@ start:
 !:  sta ring_hi,x
     dex
     bpl !-
+
+    // the police car's 16 directions to COPSTORE (the start-up data they
+    // come from is overwritten by the map later)
+    lda #<cop_rot_data
+    sta zsrc
+    lda #>cop_rot_data
+    sta zsrc + 1
+    lda #<COPSTORE
+    sta zdst
+    lda #>COPSTORE
+    sta zdst + 1
+    ldx #3
+    jsr copy_pages
+    lda #<mus_store_data            // and the chase tune
+    sta zsrc
+    lda #>mus_store_data
+    sta zsrc + 1
+    ldx #1
+    jsr copy_pages
 
     // charset and car/arrow sprites go under the I/O area (packed, at the
     // end of the program: the map is unpacked over them afterwards)
@@ -1223,8 +1253,19 @@ gl_sprites:
     sta frame_ready
     jmp game_loop
 
-// the B->A screen shift lives at $e000 (where the title picture was)
+// the B->A screen shift lives at $e000 (where the title picture was), the
+// police car's 16 directions at $f800 after it
 gen_shift_ba:
+    lda #<COPSTORE
+    sta zsrc
+    lda #>COPSTORE
+    sta zsrc + 1
+    lda #<COPSPR
+    sta zdst
+    lda #>COPSPR
+    sta zdst + 1
+    ldx #3
+    jsr copy_pages
     lda #<shift_ba
     sta zdst
     lda #>shift_ba
@@ -4077,6 +4118,8 @@ program_end:
 charset_rle: .fill charsetPacked.size(), charsetPacked.get(i)
 sprhi_rle:  .fill sprHiPacked.size(), sprHiPacked.get(i)
 sprlo_rle:  .fill sprLoPacked.size(), sprLoPacked.get(i)
+cop_rot_data: .fill copRot.size(), copRot.get(i)
+mus_store_data: .fill 256, (i < musStore.size()) ? musStore.get(i) : 0
 init_end:
 
 .print "Map packed: " + mapPacked.size() + " bytes, title: " + (bmpPacked.size() + scrPacked.size() + colPacked.size())

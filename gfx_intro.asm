@@ -86,6 +86,15 @@
     }
 }
 
+// the credit, on the bottom sidewalk
+.var credit = "MADE IN 2026 BY MORTEN"
+.var creditX = floor((IW - credit.size() * 5) / 2)
+.for (var i = 0; i < credit.size(); i++) {
+    .for (var gy = 0; gy < 7; gy++) .for (var gx = 0; gx < 4; gx++) {
+        .if (fontPix(credit.charAt(i), gx, gy)) .eval ip(creditX + i * 5 + gx, 193 + gy, 1)
+    }
+}
+
 // the logo: 4x7 font scaled 4 wide x 3 high, slanted, striped
 // yellow/orange/red by character row, brown drop shadow, black outline
 .function logoLine(text, y0) {
