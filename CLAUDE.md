@@ -145,8 +145,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; under 100 bytes free:
-  put new data in the start-up area and copy it out, as for $0400). After it
+- `$0801-$74xx` program + data (must stay below $8000; ~2.8 KB free). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.
@@ -158,7 +157,11 @@ into characters and de-duplicated.
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
   packed map (`map_rle`, free after unpacking; must stay ≥ 6001 bytes, an
-  assert checks this), B→A at `$e000`, generated again every time the city
+  assert checks this), and the 2,790 bytes of tables after it (`sin_tab` to
+  `steal_kind`: `tail_src` in the start-up data, assembled for `TAIL` =
+  `map_rle` + 6001, parked at $e000 during start-up and copied there once
+  the map is unpacked; `TAIL_PAGES`; only 12 bytes to spare before the title
+  picture data, asserts check it: new tables go in the program), B→A at `$e000`, generated again every time the city
   comes back from a bitmap screen (`gen_shift_ba`).
 - KERNAL and BASIC are banked out (`$01=$35`), IRQ/NMI vectors at `$fffe/$fffa`.
 - Zero page `$02-$bx` is the game's (allocated with `zalloc`).

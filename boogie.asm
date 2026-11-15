@@ -32,6 +32,8 @@
 .const COPSPR = $f800            // police car sprites 224-239 (after the B->A shift)
 .const COPSTORE = $0400          // their copy, 12 sprites (the bitmap screens overwrite $f800)
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
+.const TAIL_PAGES = 11            // the tables moved out of the program (see tail_src)
+.const TEMP = $e000               // where they wait during start-up
 .const MAP = $8000
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -426,6 +428,19 @@ start:
     dex
     bpl !-
 
+    // the tables for later (start-up data, maybe past $8000 where the map
+    // goes) wait at TEMP until the packed map is free
+    lda #<tail_src
+    sta zsrc
+    lda #>tail_src
+    sta zsrc + 1
+    lda #<TEMP
+    sta zdst
+    lda #>TEMP
+    sta zdst + 1
+    ldx #TAIL_PAGES
+    jsr copy_pages
+
     // the police car's 16 directions to COPSTORE (the start-up data they
     // come from is overwritten by the map later)
     lda #<cop_rot_data
@@ -503,6 +518,23 @@ start:
     lda #>SCR_B
     sta t3
     jsr gen_shift
+    lda #<TEMP                      // and the tables after it
+    sta zsrc
+    lda #>TEMP
+    sta zsrc + 1
+    lda #<TAIL
+    sta zdst
+    lda #>TAIL
+    sta zdst + 1
+    ldx #TAIL_PAGES - 1             // (exactly: the title picture follows)
+    jsr copy_pages
+    ldy #0
+!:  lda (zsrc),y
+    sta (zdst),y
+    iny
+    cpy #<(tail_end - tail_start)
+    bne !-
+
 
     jsr music_init
     lda #1
@@ -3441,6 +3473,7 @@ dc_nc2:
 // is unpacked), B->A where the title picture was.
 .label shift_ab = map_rle
 .label shift_ba = BITMAP
+.label TAIL = map_rle + 6001        // free after start-up: the moved tables
 // zdst = where, t0/t1 = source screen, t2/t3 = destination screen
 gen_shift:
     lda t0
@@ -4059,6 +4092,36 @@ hd_common:
 // =====================================================================
 // tables and data
 // =====================================================================
+
+
+.var mapPacked = rlePack(cityMap)
+map_rle:    .fill mapPacked.size(), mapPacked.get(i)
+.var bmpPacked = rlePack(introBitmap)
+intro_bitmap: .fill bmpPacked.size(), bmpPacked.get(i)
+.var scrPacked = rlePack(introScreen)
+intro_screen: .fill scrPacked.size(), scrPacked.get(i)
+.var colPacked = rlePack(introColor)
+intro_color: .fill colPacked.size(), colPacked.get(i)
+program_end:
+
+// only needed once at start-up (unpacked before the map goes to $8000, so
+// this part may reach past $8000)
+.var charsetBytes = List()
+.for (var c = 0; c < 256; c++) .for (var b = 0; b < 8; b++) .eval charsetBytes.add((c < chars.size()) ? chars.get(c).get(b) : 0)
+.var charsetPacked = rlePack(charsetBytes)
+.var sprHiPacked = rlePack(sprHi)
+.var sprLoPacked = rlePack(sprLo)
+charset_rle: .fill charsetPacked.size(), charsetPacked.get(i)
+sprhi_rle:  .fill sprHiPacked.size(), sprHiPacked.get(i)
+sprlo_rle:  .fill sprLoPacked.size(), sprLoPacked.get(i)
+cop_rot_data: .fill copRot.size(), copRot.get(i)
+mus_store_data: .fill 256, (i < musStore.size()) ? musStore.get(i) : 0
+// tables only used once the game runs: they travel in the start-up data
+// (TAIL_SRC, via $e000) to TAIL, after the A->B shift where the packed map
+// was (see start)
+tail_src:
+.pseudopc TAIL {
+tail_start:
 sin_tab:    .fill 256 + 64, (round(127 * sin(i * 2 * PI / 256)) + 256) & 255
 mrow_lo:    .fill 128, <(MAP + i * 128)
 mrow_hi:    .fill 128, >(MAP + i * 128)
@@ -4096,30 +4159,13 @@ kind_col:   .byte 7, 1, 0, 0        // stolen cab yellow, white car, black cars
 steal_col:  .fill NSTEAL, 0         // stolen cars, put back at the next game
 steal_row:  .fill NSTEAL, 0
 steal_kind: .fill NSTEAL, $ff
+tail_end:
+}
 
+.print "Tables moved out of the program: " + (tail_end - tail_start) + " bytes"
 
-.var mapPacked = rlePack(cityMap)
-map_rle:    .fill mapPacked.size(), mapPacked.get(i)
-.var bmpPacked = rlePack(introBitmap)
-intro_bitmap: .fill bmpPacked.size(), bmpPacked.get(i)
-.var scrPacked = rlePack(introScreen)
-intro_screen: .fill scrPacked.size(), scrPacked.get(i)
-.var colPacked = rlePack(introColor)
-intro_color: .fill colPacked.size(), colPacked.get(i)
-program_end:
-
-// only needed once at start-up (unpacked before the map goes to $8000, so
-// this part may reach past $8000)
-.var charsetBytes = List()
-.for (var c = 0; c < 256; c++) .for (var b = 0; b < 8; b++) .eval charsetBytes.add((c < chars.size()) ? chars.get(c).get(b) : 0)
-.var charsetPacked = rlePack(charsetBytes)
-.var sprHiPacked = rlePack(sprHi)
-.var sprLoPacked = rlePack(sprLo)
-charset_rle: .fill charsetPacked.size(), charsetPacked.get(i)
-sprhi_rle:  .fill sprHiPacked.size(), sprHiPacked.get(i)
-sprlo_rle:  .fill sprLoPacked.size(), sprLoPacked.get(i)
-cop_rot_data: .fill copRot.size(), copRot.get(i)
-mus_store_data: .fill 256, (i < musStore.size()) ? musStore.get(i) : 0
+.errorif tail_end - tail_start > intro_bitmap - TAIL, "the moved tables do not fit after the A->B shift"
+.errorif tail_end - tail_start <= (TAIL_PAGES - 1) * 256 || tail_end - tail_start > TAIL_PAGES * 256, "set TAIL_PAGES to " + ceil((tail_end - tail_start) / 256)
 init_end:
 
 .print "Map packed: " + mapPacked.size() + " bytes, title: " + (bmpPacked.size() + scrPacked.size() + colPacked.size())
