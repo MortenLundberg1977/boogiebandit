@@ -978,7 +978,7 @@ title_go:
     sta $d002
     lda #208
     sta $d004
-    lda #230
+    lda #222                        // PRESS FIRE: 14 lines, clear of the credit (244)
     sta $d001
     sta $d003
     sta $d005
