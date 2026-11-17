@@ -9,7 +9,7 @@
 // is left to the effect.
 
 .const SPEED = 7                                // frames per 16th note: calm
-.const SPEED_CHASE = 5                          // and during a police chase
+.const SPEED_CHASE = 6                          // and during a police chase
 
 // ---------------------------------------------------------------- instruments
 .const I_BASS = 0

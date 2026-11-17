@@ -152,6 +152,9 @@ npc_one:
     cmp #NT_COP
     bne !+
     jmp no_cop
+!:  cmp #NT_FOOT
+    bne !+
+    jmp foot_one
 !:  cmp #NT_OFF
     bne !+
     jsr npc_touch                   // the officer grabs a bandit who comes close
@@ -721,7 +724,9 @@ cop_stop:
     and sh_en
     beq cs_no
     lda n_type + 3                  // and slot 3's cab was not (its sprite
-    beq !+                          // becomes the officer)
+    beq !+                          // becomes the officer; not while a
+    cmp #NT_FOOT                    // guard runs there)
+    beq cs_no
     lda sh_en
     and #%00000100
     bne cs_no
@@ -1215,14 +1220,16 @@ pc_out:
 pc_rts:
     rts
 
+// a new colour at random, never the one the car has now
 new_paint:
-    ldx car_col_i
-    inx
-    cpx #NPAINT
-    bcc !+
-    ldx #0
-!:  stx car_col_i
+    jsr rng_next
+    and #7
+    cmp #NPAINT
+    bcs new_paint
+    tax
     lda paint_cols,x
+    cmp car_col
+    beq new_paint
     sta car_col
     sed                             // $300 for the paint job
     sec
@@ -1436,6 +1443,11 @@ cops_off:
     lda officer
     bmi !+
     jsr officer_in
+!:  lda n_type + 3                  // a guard on foot goes too
+    cmp #NT_FOOT
+    bne !+
+    ldx #3
+    jsr spawn_cab
 !:  lda #0
     sta n_type
     sta n_type + 1
@@ -1842,6 +1854,258 @@ sound_off:
     sta v2_own
     rts
 
+// ---------------------------------------------------------------- guards on foot
+// After every robbery a guard runs out of the door after the bandit (slot 3,
+// NT_FOOT; at a card shop the owner, purple and a bit slower). He comes out
+// FOOT_DELAY frames after the bandit, runs at 0.7-0.9 pixels a frame (the
+// bandit walks 1), finds his way round buildings by following the wall and
+// grabs a bandit on foot closer than FOOT_REACH: BUSTED! He gives up after
+// 16 seconds or 256 pixels away; then slot 3 is a cab again.
+guard_out:
+    ldx #3
+    lda #NT_FOOT
+    sta n_type,x
+    lda man_xl
+    sta n_xl,x
+    lda man_xh
+    sta n_xh,x
+    lda man_yl
+    sta n_yl,x
+    lda man_yh
+    sta n_yh,x
+    lda #FOOT_DELAY
+    sta n_wait,x
+    lda #FOOT_TIME
+    sta n_cur,x
+    lda #0
+    sta n_acc,x
+    sta n_rot,x
+    sta foot_anim
+    sta foot_wall
+    lda #2
+    sta n_dir,x
+    lda #1
+    sta foot_slide
+    lda jobs                        // speed = FOOT_SPEED + 8 x jobs
+    asl
+    asl
+    asl
+    clc
+    adc #FOOT_SPEED
+    bcs !+
+    cmp #FOOT_MAX
+    bcc !++
+!:  lda #FOOT_MAX
+!:  sta n_spd,x
+    ldy #5                          // a bank guard is green
+    lda target                      // (the job just done: target - 3)
+    sec
+    sbc #3
+    and #NBANKS - 1
+    cmp #8
+    bcc !+
+    lda n_spd,x                     // a card shop owner purple, slower
+    sec
+    sbc #24
+    sta n_spd,x
+    ldy #4
+!:  sty foot_col
+    rts
+
+// slot x = 3, nd/na from npc_delta
+foot_one:
+    lda n_wait,x                    // still inside
+    beq !+
+    dec n_wait,x
+    rts
+!:  lda vbl                         // out of breath after 16 seconds
+    and #3
+    bne !+
+    dec n_cur,x
+    beq fo_gone
+!:  lda nax_h                       // or too far away
+    ora nay_h
+    bne fo_gone
+    lda state                       // caught him?
+    cmp #ST_WALK
+    bne fo_run
+    lda #FOOT_REACH
+    jsr npc_near
+    bcc fo_run
+    lda #1
+    sta busted
+    rts
+fo_gone:
+    jmp spawn_cab                   // (x = 3) a cab again
+fo_run:
+    jsr face_dir
+    sta n_dir,x
+    lda n_acc,x                     // a pixel when the fraction runs over
+    clc
+    adc n_spd,x
+    sta n_acc,x
+    bcs !+
+    rts
+!:  inc foot_anim
+    lda #3
+    sta bhw
+    lda #2
+    sta bmask
+    lda #0
+    sta t3                          // pixels moved
+    sta t5                          // the way blocked: 1 x, 2 y
+    lda foot_wall
+    beq fo_direct
+    // along a wall: straight towards him again if free, else slide on
+    dec foot_wall
+    lda foot_axis
+    bne fo_wy
+    jsr fo_sx
+    jsr foot_try_x
+    lda t3
+    bne fo_free
+    lda foot_slide
+    jsr foot_try_y
+    jmp fo_slid
+fo_wy:
+    jsr fo_sy
+    jsr foot_try_y
+    lda t3
+    bne fo_free
+    lda foot_slide
+    jsr foot_try_x
+fo_slid:
+    lda t3
+    bne fo_rts
+    lda #0                          // a corner: the other way along it
+    sec
+    sbc foot_slide
+    sta foot_slide
+    rts
+fo_free:
+    lda #0
+    sta foot_wall
+fo_rts:
+    rts
+fo_direct:
+    lda nax_h                       // towards him on both axes
+    bne !+
+    lda nax_l
+    cmp #2
+    bcc fo_dy
+!:  jsr fo_sx
+    jsr foot_try_x
+    lda t3
+    bne fo_dy
+    inc t5                          // x blocked
+fo_dy:
+    lda t3
+    sta t4
+    lda nay_h
+    bne !+
+    lda nay_l
+    cmp #2
+    bcc fo_chk
+!:  jsr fo_sy
+    jsr foot_try_y
+    lda t3
+    cmp t4
+    bne fo_chk
+    lda t5
+    bne fo_chk
+    lda #2                          // y blocked
+    sta t5
+fo_chk:
+    lda t3
+    bne fo_rts
+    lda t5
+    beq fo_rts
+    // stuck: follow the wall for a while, sliding towards him if he is to
+    // that side (else the way it slid last time)
+    lda #FOOT_WALL
+    sta foot_wall
+    ldy #0
+    lda t5
+    cmp #1
+    beq !+
+    iny
+!:  sty foot_axis
+    tya
+    bne !+
+    lda nay_l
+    ora nay_h
+    beq fo_rts
+    jsr fo_sy
+    sta foot_slide
+    rts
+!:  lda nax_l
+    ora nax_h
+    beq fo_rts
+    jsr fo_sx
+    sta foot_slide
+    rts
+fo_sx:                              // +1 / -1 towards him
+    lda #1
+    ldy ndx_h
+    bpl !+
+    lda #$ff
+!:  rts
+fo_sy:
+    lda #1
+    ldy ndy_h
+    bpl !+
+    lda #$ff
+!:  rts
+
+// a = +1 / -1: the guard one pixel sideways / up or down if the way is
+// free (t3 + 1 if he moved); x and y are not kept
+foot_try_x:
+    sta t2
+    clc
+    adc n_xl + 3
+    sta bx_l
+    lda t2
+    and #$80
+    beq !+
+    lda #$ff
+!:  adc n_xh + 3
+    sta bx_h
+    lda n_yl + 3
+    sta by_l
+    lda n_yh + 3
+    sta by_h
+    jsr box_blocked
+    bne !+
+    lda bx_l
+    sta n_xl + 3
+    lda bx_h
+    sta n_xh + 3
+    inc t3
+!:  rts
+foot_try_y:
+    sta t2
+    clc
+    adc n_yl + 3
+    sta by_l
+    lda t2
+    and #$80
+    beq !+
+    lda #$ff
+!:  adc n_yh + 3
+    sta by_h
+    lda n_xl + 3
+    sta bx_l
+    lda n_xh + 3
+    sta bx_h
+    jsr box_blocked
+    bne !+
+    lda by_l
+    sta n_yl + 3
+    lda by_h
+    sta n_yh + 3
+    inc t3
+!:  rts
+
 // ---------------------------------------------------------------- sprites
 // police, officer and cabs into the sprite shadows (after the player's)
 place_npcs:
@@ -1884,8 +2148,14 @@ pn_show:
     jsr add_lane
     jmp pn_pos
 pn_off:
-    cmp #NT_OFF                     // the officer: a man sprite
+    cmp #NT_FOOT                    // a guard: still inside, or a man sprite
+    bne !+
+    lda n_wait,x
+    bne pn_skip
+    beq pn_feet
+!:  cmp #NT_OFF                     // the officer: a man sprite
     bne pn_blk
+pn_feet:
     lda #37
     sta t5
     bne pn_pos
@@ -1923,6 +2193,8 @@ pn_ok:
     beq pn_cab
     cmp #NT_OFF
     beq pn_man
+    cmp #NT_FOOT
+    beq pn_guard
     ldy vh                          // police car, lights flashing
     lda cop_ptr,y
     sta sh_ptr,x
@@ -1959,6 +2231,21 @@ pn_man:
     adc #SP_MAN
     sta sh_ptr,x
     lda #6
+    sta sh_col,x
+    jmp pn_next
+pn_guard:
+    lda n_dir,y                     // running: a step every 4 pixels
+    asl
+    sta t0
+    lda foot_anim
+    lsr
+    lsr
+    and #1
+    ora t0
+    clc
+    adc #SP_GUARD
+    sta sh_ptr,x
+    lda foot_col
     sta sh_col,x
     jmp pn_next
 pn_cab:

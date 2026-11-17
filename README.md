@@ -7,17 +7,22 @@ for KickAssembler. Drive a 70s sedan through a smooth-scrolling city, park at
 the bank the arrow points to, hop out, pull the job (KAPOW! ZOWIE! KACHING!),
 and get back to the car before the police arrive (with its own chase tune).
 Runs at 50 frames a second,
-shown top left.
+shown top left. The version (`version.asm`, semantic versioning) is in the
+top right corner of the title picture.
 
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
 ![Officer shooting](screenshots/16_officer_shooting.png) ![Paint garage](screenshots/15_paint_garage.png)
+![Guard on foot](screenshots/20_guard.png)
 
 ## How to play
 
 - Every job has a timer (top, next to the fps). Rob the place before it runs
   out, or that job is off and you lose a heart.
 - Each robbery adds a wanted star, and that many police cars come after you.
+  A guard runs out of the door after you too (green; at a card shop the
+  purple owner). He is a bit slower than you; get to the car, or around a
+  block, before he grabs you.
   Lose them all and you get a $500 bonus. If one catches you, you're BUSTED!
 - Rob banks and card shops (CARDS sign with a playing card; a smaller take
   of $200-$900). The first target is different each game.
@@ -32,7 +37,8 @@ shown top left.
   roadblocks ahead of you. You can just squeeze past one on the sidewalk.
 - Three paint garages (look for the yellow PAINT sign; small yellow marks on
   the city map). Stop inside the spray booth during a chase: $300 for a new
-  colour, and the police lose your trail.
+  colour (always a different one; it takes a second), and the police lose
+  your trail.
 - Three hearts, then game over. The best five bandits make the table on the
   title screen.
 - Watch out for the yellow cabs.

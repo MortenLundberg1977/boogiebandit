@@ -186,6 +186,39 @@
     .eval addSprite(rotSprite(manFrame(manRight, legsSideB, true, bag == 1), 0))
 }
 
+// the guard who runs out of the bank after a robbery (and the card shop
+// owner, same sprites in another colour): peaked cap with a black visor,
+// uniform in the sprite colour with a white badge, black belt, arms out.
+// Kept apart (guardSpr, 8 sprites: up, right, down, left x 2 steps); the
+// game copies them to $fb00 (sprites 236-243) with the police sprites.
+.var guardDown = List().add(
+    "..cccccc..", ".cccwwccc.", ".kkkkkkkk.", "..wkwwkw..", "..wwwwww..", "...wkkw...", "....ww....",
+    "wccccccccw", "wccwcccccw", "w..cccc..w", "...cccc...", "...kkkk...", "...cccc...")
+.var guardUp = List().add(
+    "..cccccc..", ".cccccccc.", ".cccccccc.", "..kkkkkk..", "..kkkkkk..", "...kkkk...", "....ww....",
+    "wccccccccw", "wccccccccw", "w..cccc..w", "...cccc...", "...kkkk...", "...cccc...")
+.var guardRight = List().add(
+    "...cccc...", "..ccccww..", "..cccckkkk", "..kkkwkw..", "..kkwwww..", "...kwww...", "....ww....",
+    "...ccccccw", "..cccccc.w", "..cccccc..", "..ccwccc..", "...kkkk...", "...cccc...")
+.var gLegsA = List().add("..c....c..", ".kk....kk.", ".kk....kk.")
+.var gLegsB = List().add("...c..c...", "...k..k...", "..kk..kk..")
+.var gLegsSideA = List().add("..c...c...", ".k.....k..", "kk.....kk.")
+.var gLegsSideB = List().add("....cc....", "....kk....", "....kkk...")
+.var guardSpr = List()
+.function addGuard(body, legs, flip) {
+    .var d = rotSprite(manFrame(body, legs, flip, false), 0)
+    .for (var i = 0; i < 64; i++) .eval guardSpr.add(d.get(i))
+    .return 0
+}
+.eval addGuard(guardUp, gLegsA, false)
+.eval addGuard(guardUp, gLegsB, false)
+.eval addGuard(guardRight, gLegsSideA, false)
+.eval addGuard(guardRight, gLegsSideB, false)
+.eval addGuard(guardDown, gLegsA, false)
+.eval addGuard(guardDown, gLegsB, false)
+.eval addGuard(guardRight, gLegsSideA, true)
+.eval addGuard(guardRight, gLegsSideB, true)
+
 // bank marker: a bouncing arrow pointing down at the door (2 colours)
 .for (var fr = 0; fr < 2; fr++) {
     .var art = List()

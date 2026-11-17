@@ -95,6 +95,15 @@
     }
 }
 
+// the version (version.asm), top right in the sky
+.var verText = "V" + VERSION
+.var verX = IW - verText.size() * 5
+.for (var i = 0; i < verText.size(); i++) {
+    .for (var gy = 0; gy < 7; gy++) .for (var gx = 0; gx < 4; gx++) {
+        .if (fontPix(verText.charAt(i), gx, gy)) .eval ip(verX + i * 5 + gx, 1 + gy, 1)
+    }
+}
+
 // the logo: 4x7 font scaled 4 wide x 3 high, slanted, striped
 // yellow/orange/red by character row, brown drop shadow, black outline
 .function logoLine(text, y0) {

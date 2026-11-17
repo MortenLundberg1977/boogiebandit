@@ -11,6 +11,7 @@
 //                $d000 charset (under I/O), $d800 sprites (car, arrow; under I/O),
 //                $e000 title bitmap (only on the title screen).
 
+#import "version.asm"
 #import "gfx_lib.asm"
 #import "gfx_city.asm"
 #import "gfx_sprites.asm"
@@ -31,6 +32,8 @@
 .const BITMAP = $e000
 .const COPSPR = $f800            // police car sprites 224-239 (after the B->A shift)
 .const COPSTORE = $0400          // their copy, 12 sprites (the bitmap screens overwrite $f800)
+.const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
+.const SP_GUARD = 236             // + dir*2 + step
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
 .const TAIL_PAGES = 11            // the tables moved out of the program (see tail_src)
 .const TEMP = $e000               // where they wait during start-up
@@ -69,6 +72,13 @@
 .const NT_OFF = 3                // a police officer on foot (slot 3), shooting
 .const NT_LOST = 4               // a police car that lost the trail (new paint)
 .const NT_BLOCK = 5              // a roadblock (slot 2)
+.const NT_FOOT = 6               // a guard / shop owner running after the bandit (slot 3)
+.const FOOT_DELAY = 75           // frames before the guard comes out of the door
+.const FOOT_TIME = 200           // he gives up after 4 x this many frames (16 s)
+.const FOOT_SPEED = 176          // 1/256 pixels a frame: 0.69, + 8 a job (the bandit does 1)
+.const FOOT_MAX = 232            // 0.91
+.const FOOT_REACH = 10           // closer than this on foot: BUSTED!
+.const FOOT_WALL = 48            // steps along a wall before he tries straight again
 .const CAB_SPEED = 96            // 1/64 pixels a frame: 1.5
 .const COP_SPEED = 100           // 1.6, + 12 for each bank robbed (at most COP_MAX)
 .const COP_MAX = 172             // 2.7 (the car does 3)
@@ -78,7 +88,7 @@
 .const OUT_FRAMES = 100          // an officer stays out 2 seconds, two shots
 .const SHOOT_CD = 200            // then nobody gets out for 4 seconds
 .const BULLET_FRAMES = 40
-.const PAINT_FRAMES = 75         // 1.5 seconds in the spray booth
+.const PAINT_FRAMES = 50         // 1 second in the spray booth
 .const SFX_SHOT = 7
 .const SFX_SPRAY = 8
 .const MSG_FRAMES = 100
@@ -371,6 +381,11 @@
 .label n_next = balloc(5)          // the way planned at the next crossing ($ff: none)
 .label n_prev = balloc(5)          // the way before the last crossing
 .label n_rot = balloc(5)           // U-turn steps still to show
+.label foot_col = balloc(1)        // the guard in slot 3 (NT_FOOT): colour,
+.label foot_slide = balloc(1)      // way round a wall (1 / $ff), steps (animation)
+.label foot_anim = balloc(1)
+.label foot_wall = balloc(1)       // steps still to follow a wall, and along which
+.label foot_axis = balloc(1)       // axis (0: the wall blocks x, he slides in y)
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -1298,6 +1313,16 @@ gen_shift_ba:
     sta zdst + 1
     ldx #3
     jsr copy_pages
+    lda #<guard_spr                 // and the guard after them
+    sta zsrc
+    lda #>guard_spr
+    sta zsrc + 1
+    lda #<GUARDSPR
+    sta zdst
+    lda #>GUARDSPR
+    sta zdst + 1
+    ldx #2
+    jsr copy_pages
     lda #<shift_ba
     sta zdst
     lda #>shift_ba
@@ -1311,6 +1336,10 @@ gen_shift_ba:
     lda #>SCR_A
     sta t3
     jmp gen_shift
+
+// the guard sprites (8, copied to GUARDSPR by gen_shift_ba)
+guard_spr:  .fill guardSpr.size(), guardSpr.get(i)
+.errorif guardSpr.size() != 512, "the guard is 8 sprites"
 
 // the city palette, one colour RAM value everywhere
 city_colours:
@@ -2647,7 +2676,8 @@ er_loot:
     sta target
     lda #ST_WALK
     sta state
-    jmp job_done                    // time bonus, the next job, the police
+    jsr job_done                    // time bonus, the next job, the police
+    jmp guard_out                   // and a guard runs out after him
 
 // a comic bubble near the bank door, different word and colour each time
 new_bubble:
@@ -3596,17 +3626,9 @@ place_sprites:
     sta sh_msb
     sta sh_xexp
     sta sh_yexp
-    // the car's paint (flashing in the spray booth)
+    // the car's paint (changes once, when the spray job is done)
     lda car_col
-    ldx paint_t
-    beq !+
-    lda vbl
-    lsr
-    lsr
-    and #7
-    tax
-    lda spray_cols,x
-!:  sta sh_col + 5
+    sta sh_col + 5
     // the car (sprite 5), unless the police took it
     lda have_car
     beq ps_nocar
@@ -3764,7 +3786,6 @@ pa_go:
     jmp place_npcs
 
 bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
-spray_cols: .byte 1, 7, 13, 3, 14, 4, 10, 8
 
 // a = direction 0-15 (0 = north, clockwise) of the vector (ax, ay)
 direction16:
