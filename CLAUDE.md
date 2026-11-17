@@ -83,9 +83,12 @@ kept in a list of 32 (`steal_col/row/kind`) and parked again at the next
 game start (the oldest goes back at once when the list is full). Any old car
 of his is left for good (it vanishes). Parked cars: at most one per block
 along an avenue, on one side. The music runs at 7 frames a 16th
-note; during a chase the chase tune "Hot Pursuit" plays at 6 (`m_song`,
-`m_speed`; its driving part, bass and drums, is on voice 3, since the siren
-and the engine take voices 1 and 2). The title picture says "MADE IN 2026 BY
+note; during a chase the chase tune "Red Light Runner" (E minor, 8 bars) plays at 6 (`m_song`,
+`m_speed`; while driving only voice 3 is heard, since the siren and the
+engine take voices 1 and 2, so voice 3 carries a riff: a bass line jumping
+octaves into a melody, with the drums in between; on foot a lead joins on
+voice 2; patterns that do not fit at MUSSTORE go into the program).
+The title picture says "MADE IN 2026 BY
 MORTEN" on the bottom sidewalk.
 
 Two yellow cabs drive around near the player (new ones appear when they get
@@ -108,7 +111,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V1.2.0" in the top right of the title
+a fix only PATCH + 1), drawn as "V1.3.0" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 

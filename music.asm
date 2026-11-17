@@ -1,5 +1,6 @@
 // Boogie Bandit - a small SID player and an original funk/disco tune
-// ("Getaway Groove", A minor, 125 BPM). Plus sound effects on voice 3.
+// ("Getaway Groove", A minor) and the chase tune ("Red Light Runner", E
+// minor). Plus sound effects on voice 3.
 //
 // Patterns are written as text, one token per 16th step:
 //   A2 C#3 ...   note (octave digit last)     .  hold the previous note/rest
@@ -153,20 +154,26 @@
 .var ord3 = order("dI dI  dA dA dA dB  dA dA dA dB  dA dA dA dB  dA dA dA dB", 2)
 
 // ---------------------------------------------------------------- the chase tune
-// "Hot Pursuit": faster, minor stabs. During a chase the siren has voice 1
-// and the engine voice 2, so the driving part (bass with the drums mixed
-// in) is on voice 3. Its data is kept at MUSSTORE ($0700, copied there at
-// start-up) to save room in the program.
+// "Red Light Runner": E minor, a riff for one voice. During a chase the siren
+// has voice 1 and the engine voice 2 (while driving), so voice 3 carries it
+// all: a bass line that jumps octaves into a melody, with kick, snare and
+// hats in between. On foot the lead on voice 2 joins in. The order lists
+// (and the patterns that fit) are kept at MUSSTORE ($0700, copied there at
+// start-up), the rest in the program.
 .var FIRST_CHASE = patterns.size()
-.eval pat("cA", I_BASS, "K A1 h A2 S A1 h A2 K A1 h C3 S A2 h G2")
-.eval pat("cF", I_BASS, "K F1 h F2 S F1 h F2 K F1 h A2 S F2 h E2")
-.eval pat("cE", I_BASS, "K E1 h E2 S E1 h E2 K E1 h G#2 S E2 S S")
-.eval pat("cL1", I_STAB, "A4 - A4 - C5 - A4 - E5 - D5 - C5 - B4 -")
-.eval pat("cL2", I_STAB, "A4 - A4 - C5 - A4 - G5 - F5 - E5 - D5 -")
-.eval pat("cL3", I_LEAD, "E5 . . . D5 . . . C5 . . . B4 . G#4 .")
+.eval pat("cE1", I_BASS, "K E2 E3 E2 S E2 G2 A2 K E2 E3 E2 S B2 A2 G2")
+.eval pat("cE2", I_BASS, "K E2 E3 E2 S E2 G2 A2 K A#2 B2 D3 S E3 D3 B2")
+.eval pat("cC", I_BASS, "K C2 C3 C2 S C2 E2 G2 K C2 C3 C2 S G2 E2 C2")
+.eval pat("cD", I_BASS, "K D2 D3 D2 S D2 F#2 A2 K B1 B2 B1 S D#3 F#3 B2")
+.eval pat("cX", I_BASS, "K E2 S E2 S E2 h S K B1 S B1 S S S S")
+.eval pat("cM1", I_LEAD, "B4 . . . E5 . . . G5 . F#5 . E5 . D5 .")
+.eval pat("cM2", I_LEAD, "E5 . . . . . . . - . B4 . D5 . E5 .")
+.eval pat("cM3", I_LEAD, "C5 . . . E5 . . . G5 . . . F#5 . E5 .")
+.eval pat("cM4", I_LEAD, "D5 . . . F#5 . . . B5 . . . A5 . F#5 .")
+.eval pat("cM5", I_LEAD, "B4 . D#5 . F#5 . B5 . A5 . F#5 . D#5 . B4 .")
 .var cord1 = order("R", 0)
-.var cord2 = order("cL1 cL2 cL1 cL3", 0)
-.var cord3 = order("cA cA cF cE", 0)
+.var cord2 = order("cM1 cM2 cM1 cM2 cM3 cM3 cM4 cM5", 0)
+.var cord3 = order("cE1 cE2 cE1 cE2 cC cC cD cX", 0)
 
 // ---------------------------------------------------------------- player code
 music_init:
@@ -555,17 +562,21 @@ freq_lo: .fill 96, <freqReg(i)
 freq_hi: .fill 96, >freqReg(i)
 .var patOffs = List()
 .var patAll = List()
+// chase patterns go to MUSSTORE while they fit, the rest into the program
+.var patStored = List()
 .for (var p = 0; p < patterns.size(); p++) {
-    .if (p < FIRST_CHASE) {
-        .eval patOffs.add(patAll.size())
-        .for (var i = 0; i < patterns.get(p).size(); i++) .eval patAll.add(patterns.get(p).get(i))
-    } else {
+    .if (p >= FIRST_CHASE && musStore.size() + patterns.get(p).size() <= 256) {
+        .eval patStored.add(true)
         .eval patOffs.add(MUSSTORE + musStore.size())
         .for (var i = 0; i < patterns.get(p).size(); i++) .eval musStore.add(patterns.get(p).get(i))
+    } else {
+        .eval patStored.add(false)
+        .eval patOffs.add(patAll.size())
+        .for (var i = 0; i < patterns.get(p).size(); i++) .eval patAll.add(patterns.get(p).get(i))
     }
 }
-.errorif musStore.size() > 256, "the chase tune is too long for MUSSTORE: " + musStore.size()
+.errorif musStore.size() > 256, "the chase tune's order lists are too long for MUSSTORE: " + musStore.size()
 .print "Chase tune: " + musStore.size() + " bytes at MUSSTORE"
 pat_data: .fill patAll.size(), patAll.get(i)
-pat_lo: .fill patterns.size(), (i < FIRST_CHASE) ? <(pat_data + patOffs.get(i)) : <patOffs.get(i)
-pat_hi: .fill patterns.size(), (i < FIRST_CHASE) ? >(pat_data + patOffs.get(i)) : >patOffs.get(i)
+pat_lo: .fill patterns.size(), patStored.get(i) ? <patOffs.get(i) : <(pat_data + patOffs.get(i))
+pat_hi: .fill patterns.size(), patStored.get(i) ? >patOffs.get(i) : >(pat_data + patOffs.get(i))
