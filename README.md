@@ -20,8 +20,9 @@ top right corner of the title picture.
 - Every job has a timer (top, next to the fps). Rob the place before it runs
   out, or that job is off and you lose a heart.
 - Each robbery adds a wanted star, and that many police cars come after you.
-  A guard runs out of the door after you too (green; at a card shop the
-  purple owner). He is a bit slower than you; get to the car, or around a
+  A guard comes out of the door behind you too (green; at a card shop the
+  purple owner). After two seconds he runs after you, a bit slower than
+  you walk; get to the car, or around a
   block, before he grabs you.
   Lose them all and you get a $500 bonus. If one catches you, you're BUSTED!
 - Rob banks and card shops (CARDS sign with a playing card; a smaller take

@@ -50,7 +50,9 @@ Guards on foot: after every robbery (`guard_out`, end of `end_rob`) a guard
 runs out of the door after the bandit, `NT_FOOT` in slot 3 (sprite 2, the cab
 there goes; not while an officer is out, and no officer gets out while he
 runs). Green at a bank, the purple owner at a card shop (24 slower). He comes
-out `FOOT_DELAY` (1.5 s) after the bandit, runs at `FOOT_SPEED` + 8 a job
+out with him and stands in the doorway behind him, facing him, for
+`FOOT_DELAY` (2 s; he can not grab anyone then, the door sound when he starts),
+then runs at `FOOT_SPEED` + 8 a job
 (1/256 pixels a frame, at most `FOOT_MAX` = 0.91; the bandit walks 1),
 straight at him on both axes with the walking collision (`box_blocked`); when
 both ways are blocked he follows the wall for up to `FOOT_WALL` steps
@@ -106,7 +108,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V1.1.0" in the top right of the title
+a fix only PATCH + 1), drawn as "V1.1.1" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 

@@ -1869,9 +1869,12 @@ guard_out:
     sta n_xl,x
     lda man_xh
     sta n_xh,x
-    lda man_yl
+    lda man_yl                      // in the doorway, just behind him
+    sec
+    sbc #4
     sta n_yl,x
     lda man_yh
+    sbc #0
     sta n_yh,x
     lda #FOOT_DELAY
     sta n_wait,x
@@ -1914,10 +1917,15 @@ guard_out:
 
 // slot x = 3, nd/na from npc_delta
 foot_one:
-    lda n_wait,x                    // still inside
-    beq !+
+    lda n_wait,x                    // standing in the door, looking at him
+    beq !++                         // (he can't grab anyone yet)
+    jsr face_dir
+    sta n_dir,x
     dec n_wait,x
-    rts
+    bne !+
+    lda #SFX_DOOR                   // off he goes
+    jsr sfx_play
+!:  rts
 !:  lda vbl                         // out of breath after 16 seconds
     and #3
     bne !+
@@ -2148,15 +2156,11 @@ pn_show:
     jsr add_lane
     jmp pn_pos
 pn_off:
-    cmp #NT_FOOT                    // a guard: still inside, or a man sprite
-    bne !+
-    lda n_wait,x
-    bne pn_skip
-    beq pn_feet
-!:  cmp #NT_OFF                     // the officer: a man sprite
+    cmp #NT_FOOT                    // a guard or the officer: a man sprite
+    beq !+
+    cmp #NT_OFF
     bne pn_blk
-pn_feet:
-    lda #37
+!:  lda #37
     sta t5
     bne pn_pos
 pn_blk:

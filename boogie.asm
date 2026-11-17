@@ -73,7 +73,7 @@
 .const NT_LOST = 4               // a police car that lost the trail (new paint)
 .const NT_BLOCK = 5              // a roadblock (slot 2)
 .const NT_FOOT = 6               // a guard / shop owner running after the bandit (slot 3)
-.const FOOT_DELAY = 75           // frames before the guard comes out of the door
+.const FOOT_DELAY = 100          // frames the guard stands in the door (seen, harmless)
 .const FOOT_TIME = 200           // he gives up after 4 x this many frames (16 s)
 .const FOOT_SPEED = 176          // 1/256 pixels a frame: 0.69, + 8 a job (the bandit does 1)
 .const FOOT_MAX = 232            // 0.91
