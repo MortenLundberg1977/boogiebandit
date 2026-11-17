@@ -71,6 +71,13 @@ image `build\boogiebandit.t64` (the same program, for loaders and emulators
 that take .t64), and starts VICE. On a real C64 from the disk:
 `LOAD"BOOGIE",8` then `RUN`.
 
+With a Kung Fu Flash cartridge on USB, `build.bat send` builds the game and
+sends it straight to the C64, which starts it. The C64 must show the Kung Fu
+Flash menu. This uses `ef3usb.exe`, the modified EasyFlash 3 USB tool from the
+[Kung Fu Flash repository](https://codeberg.org/KimJorgensen/KungFuFlash/src/branch/master/3rd_party/ef3utils),
+looked for in `..\tools\ef3utils` (or set `EF3USB_EXE`). The cartridge's COM
+port is found automatically; set `KFF_PORT` (e.g. `COM3`) to choose it.
+
 All graphics, the title picture, the fonts and the music are generated at
 build time from the sources; there are no binary assets.
 

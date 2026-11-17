@@ -112,11 +112,14 @@ that commit `v<version>`.
 
 ## Build and test
 
-- `build.bat [pull [branch]] [run]` → `build\boogie.prg`, `build\boogiebandit.d64`
+- `build.bat [pull [branch]] [run|send]` → `build\boogie.prg`, `build\boogiebandit.d64`
   (file `boogie`, lowercase: uppercase becomes shifted PETSCII). One file, loads
   at $0801, `LOAD"BOOGIE",8` + `RUN` on a real C64. Also
   `build\boogiebandit.t64` (tape image, written by `tools\make_t64.ps1`; the
   name inside is `BOOGIE` in capitals, as PETSCII).
+- `build.bat send` sends `build\boogie.prg` to a Kung Fu Flash cartridge on
+  USB with `..\tools\ef3utils\ef3usb.exe` (`EF3USB_EXE`) and starts it. The
+  port is found by USB ID 0483:5740 unless `KFF_PORT` is set (it was COM3).
 - `powershell -ExecutionPolicy Bypass -File tools\vice.ps1 build\boogie.prg "wait 4; poke 1d 10; wait 0.3; poke 1d 00; wait 2; shot build\a.png; peek 17 1; quit"`
   drives VICE through the remote monitor. Commands: `wait`, `shot`, `poke`,
   `peek`, `mon`, `raw`, `quit`; `-Extra "-sounddev wav -soundarg build\x.wav"`
