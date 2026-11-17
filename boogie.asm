@@ -55,8 +55,8 @@
 .const ACCEL = 6
 .const BRAKE = 14
 .const DRAG = 3
-.const ROB_FRAMES = 500         // 10 seconds
-.const BUBBLE_FRAMES = 100
+.const ROB_FRAMES = 333         // 6.7 seconds
+.const BUBBLE_FRAMES = 67         // five bubbles a robbery
 .const SFX_POW = 0
 .const SFX_CRASH = 1
 .const SFX_CHING = 2

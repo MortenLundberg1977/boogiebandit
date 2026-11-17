@@ -1,6 +1,7 @@
 // Boogie Bandit - the title picture, painted at build time into a
 // 160 x 200 multicolor bitmap: striped 70s sky, a striped sunset, the
-// skyline, a street, and the logo in a slanted, striped 70s style.
+// skyline with a green lady holding up a torch, a street, and the logo in a
+// slanted, striped 70s style.
 // Colours are C64 colour numbers; the background ($d021) is black.
 
 .const IW = 160
@@ -42,6 +43,57 @@
     }
 }
 
+// a green lady with a torch on the right, standing up behind the skyline
+// (drawn before the buildings, so they hide her pedestal). Art pixels are
+// doubled in height (a multicolor pixel is 2 screen pixels wide):
+// G light green, g green, y the flame.
+.var ladyArt = List().add(
+    "..y...........",
+    ".yyy..........",
+    "..y...........",
+    ".GGG..........",
+    "..G...........",
+    "..G...........",
+    "..G...G.G.G...",
+    "..G...GGGGG...",
+    "..G..GGGGGGG..",
+    "..GG..GgGgG...",
+    "...GG.GGGGG...",
+    "....GGGGGGG...",
+    "....GGGGGGGG..",
+    ".....GGGGGGgG.",
+    ".....GgGGGGgG.",
+    ".....GGgGGGgG.",
+    ".....GGGgGGGG.",
+    ".....GgGGgGG..",
+    ".....GGgGGgG..",
+    ".....GGGgGGg..",
+    ".....GgGGgGG..",
+    "....GGGgGGgGG.",
+    "....GGgGGgGGG.",
+    "....GGGGgGGgG.",
+    "....GgGGGgGGG.",
+    "...GGGGgGGGgGG",
+    "...GGGgGGgGGGG",
+    "...GGgGGGGgGGG",
+    "...GGGGgGGGgGG",
+    "...GgGGGgGGGGG")
+.const LADY_X = 144
+.const LADY_Y = 58
+.for (var r = 0; r < ladyArt.size(); r++) {
+    .for (var x = 0; x < 14; x++) {
+        .var ch = ladyArt.get(r).charAt(x)
+        .var c = -1
+        .if (ch == "G") .eval c = 13
+        .if (ch == "g") .eval c = 5
+        .if (ch == "y") .eval c = 7
+        .if (c >= 0) {
+            .eval ip(LADY_X + x, LADY_Y + r * 2, c)
+            .eval ip(LADY_X + x, LADY_Y + r * 2 + 1, c)
+        }
+    }
+}
+
 // skyline: black buildings with lit windows (bottom at y = 152)
 .function tower(x0, w, top, lit) {
     .eval irect(x0, top, w, 152 - top, 0)
@@ -71,6 +123,7 @@
 .eval irect(131, 89, 3, 5, 0)
 .eval tower(2, 10, 118, 30)
 .eval tower(140, 12, 110, 35)
+.eval tower(141, 19, 112, 35)          // in front of the lady's feet
 
 // the street
 .eval irect(0, 152, IW, 8, 12)        // sidewalk
