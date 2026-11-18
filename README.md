@@ -2,13 +2,10 @@
 
 *New York, 1977. The disco never stops, and neither do you.*
 
-A top-down getaway game for the Commodore 64 (PAL), written in 6502 assembly
-for KickAssembler. Drive a 70s sedan through a smooth-scrolling city, park at
-the bank the arrow points to, hop out, pull the job (KAPOW! ZOWIE! KACHING!),
-and get back to the car before the police arrive (with its own chase tune).
-Runs at 50 frames a second,
-shown top left. The version (`version.asm`, semantic versioning) is in the
-top right corner of the title picture.
+A top-down getaway game for the Commodore 64, written in 6502 assembly. Drive
+a 70s sedan through a smooth-scrolling New York, pull the job at the bank the
+arrow points to (KAPOW! ZOWIE! KACHING!), shake off the police, change cars or
+get a new paint job, and bring the loot to your friend's house in the suburb.
 
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
