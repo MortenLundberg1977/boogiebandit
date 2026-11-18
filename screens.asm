@@ -5,7 +5,7 @@
 // normally lives at $e000 is generated again when the city comes back.
 
 // ---------------------------------------------------------------- the font
-.var fontOrder = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!-.$"
+.var fontOrder = @" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!-.$\""
 .function glyphOf(c) {
     .for (var i = 0; i < fontOrder.size(); i++) .if (fontOrder.charAt(i) == c) .return i
     .error "no glyph for '" + c + "'"
@@ -238,6 +238,7 @@ show_picture:
 show_scores:
     jsr page_blank
     Print(13, 2, 2, "BOOGIE BANDIT")
+    Print(3, 3, 3, @"STARRING VINNIE \"BOOGIE\" MARCHETTI")
     Print(14, 5, 1, "TOP BANDITS")
     lda #0
     sta hs_i
@@ -821,7 +822,7 @@ mr_byte:
     ldy t1
     lda (zp0),y
     tax
-    lda mm_code,x
+    lda MM_CODE,x
     asl
     asl
     sta t0
@@ -829,7 +830,7 @@ mr_byte:
     iny
     lda (zp0),y
     tax
-    lda mm_code,x
+    lda MM_CODE,x
     ora t0
     asl
     asl
@@ -838,7 +839,7 @@ mr_byte:
     iny
     lda (zp0),y
     tax
-    lda mm_code,x
+    lda MM_CODE,x
     ora t0
     asl
     asl
@@ -847,7 +848,7 @@ mr_byte:
     iny
     lda (zp0),y
     tax
-    lda mm_code,x
+    lda MM_CODE,x
     ora t0
     ldy t1
     sta (zp1),y
@@ -957,4 +958,4 @@ bmrow_hi:   .fill 25, >(BITMAP + i * 320)
 fnt_data:   .fill fntBytes.size(), fntBytes.get(i)
 fnt_lo:     .fill fontOrder.size(), <(fnt_data + i * 8)
 fnt_hi:     .fill fontOrder.size(), >(fnt_data + i * 8)
-mm_code:    .fill 256, mapCode.get(i)
+

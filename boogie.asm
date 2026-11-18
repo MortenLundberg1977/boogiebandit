@@ -50,6 +50,7 @@
 .const DANCE_SRC = MT_RL + 256      // the 4 dancer sprites (copied to DANCE_SPR for the score page)
 .const BAND_TAB = DANCE_SRC + 256   // the colour of the "y" pixels per block row (0-16; 13-16 the suburb)
 .const GRID_ORIG = BAND_TAB + 32    // the city grid as built (GRID is reset from it every game)
+.const MM_CODE = GRID_ORIG + 160    // the city map screen: what each character shows as (mapCode)
 .const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -118,8 +119,6 @@
 .const SPLIT_MIN_Y = 88          // shared sprites only below the HUD row
 .const JOB_TIME = $60            // seconds (BCD) for the first job
 .const JOB_MIN = $30
-.const START_X = 81 * 8
-.const START_Y = 62 * 8
 
 
 // ---------------------------------------------------------------- zero page
@@ -4701,7 +4700,9 @@ hd_common:
 .for (var i = 0; i < bandCols.size(); i++) .eval blockBytes.add($08 | bandCols.get(i))   // BAND_TAB
 .for (var i = bandCols.size(); i < 32; i++) .eval blockBytes.add(0)
 .for (var i = 0; i < GW * GH; i++) .eval blockBytes.add((BLOCKS >> 8) + 2 * grid.get(i))   // GRID_ORIG
-.errorif GRID_ORIG + GW * GH > $c000, "the map tables, the dancers, the bands and the grid must end below $c000"
+.for (var i = GW * GH; i < 160; i++) .eval blockBytes.add(0)
+.for (var i = 0; i < 256; i++) .eval blockBytes.add(mapCode.get(i))   // MM_CODE
+.errorif MM_CODE + 256 > $c000, "the map tables, the dancers, the bands, the grid and the map codes must end below $c000"
 .var mapPacked = rlePack(blockBytes)
 .const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0

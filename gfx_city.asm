@@ -526,6 +526,8 @@
 // only in whole blocks (not at the edge of the world).
 .const SUB_J = 13               // block rows 13-16: the suburb
 .const NCLOSED = 14             // closed road pieces in the city
+.const START_X = 81 * 8         // where the car starts (on an avenue: never a closed piece)
+.const START_Y = 62 * 8
 .var grid = List()
 .for (var i = 0; i < GW * GH; i++) .eval grid.add(-1)
 .function gset(i, j, d) {
@@ -630,6 +632,7 @@
     .var j = floor(g / GW)
     .var isOff = false
     .for (var k = 0; k < dOffice.size(); k++) .if (dOffice.get(k) == grid.get(g)) .eval isOff = true
+    .if (g == floor((START_X / 8 + 13) / 32) + floor((START_Y / 8 + 5) / 16) * GW) .eval isOff = false
     .if (isOff) {
         .var av = rnd(2) == 0
         .var c1 = av ? (toIntString(i) + "," + toIntString(j - 1)) : (toIntString(i - 1) + "," + toIntString(j))

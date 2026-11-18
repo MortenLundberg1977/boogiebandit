@@ -12,7 +12,9 @@ the game's own fonts in `gfx_lib.asm`), black tyre marks.
 
 ## Gameplay
 
-Drive the red sedan through a scrolling 256 x 256 character city (built from blocks, see "The city") to the bank
+The hero is Vinnie "Boogie" Marchetti (named on the high score page:
+`STARRING VINNIE "BOOGIE" MARCHETTI`; the font has a `"` glyph, `@"..."` strings
+in KickAssembler for it). Drive the red sedan through a scrolling 256 x 256 character city (built from blocks, see "The city") to the bank
 the arrow (lower left) points at; a green marker bounces over its door. Fire
 (when nearly stopped) gets out; walk into the door: a 4 second robbery with
 comic bubbles (KAPOW!, BLAM!, ...), five per robbery, random word and colour.
@@ -238,13 +240,13 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 20 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 200 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
   (512 bytes each, unpacked at start-up), `PRIV` 4 private copies, `GRID`
   (9 x 17), the `map_at` tables `MT_CB`/`MT_CY`/`MT_RG`/`MT_RH`/`MT_RL`
-  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `BAND_TAB` and `GRID_ORIG`, free from about $bdb0.
+  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `BAND_TAB`, `GRID_ORIG` and `MM_CODE` (the city map's character codes), free from about $beb0.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
@@ -351,7 +353,8 @@ piece (`dNoAv`: buildings to column 29) or street piece (`dNoSt`: a row of build
 rows 12-14) built over, at most one per crossing, so every crossing keeps two ways (the
 police would loop forever with none); not in block row 12 (the grass split needs the street
 above the suburb free of "w" pixels). The city builder saves and restores `seed` around
-this, so everything built after it (the title picture) stays the same. Then:
+this, so everything built after it (the title picture) stays the same, and never closes
+the block the car starts in (`START_X`/`START_Y`, in gfx_city.asm). Then:
 cabs at random, police towards the player (longer distance first) and they
 turn around when the player is behind them.
 Turning: police cars and cabs choose their way 16 pixels before a crossing

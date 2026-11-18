@@ -2,8 +2,9 @@
 
 *New York, 1977. The disco never stops, and neither do you.*
 
-A top-down getaway game for the Commodore 64, written in 6502 assembly. Drive
-a 70s sedan through a big smooth-scrolling New York, pull the job at the bank the
+A top-down getaway game for the Commodore 64, written in 6502 assembly. You are
+Vinnie "Boogie" Marchetti: drive a 70s sedan through a big smooth-scrolling
+New York, pull the job at the bank the
 arrow points to (KAPOW! ZOWIE! KACHING!), shake off the police, change cars or
 get a new paint job, and bring the loot to your friend's house in the suburb.
 
