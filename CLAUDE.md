@@ -158,7 +158,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
 a fix only PATCH + 1), drawn as "V2.1.0" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
-that commit `v<version>` (toolselease.ps1 does it and publishes the release).
+that commit `v<version>` (tools/release.ps1 does it and publishes the release).
 
 ## Build and test
 
@@ -358,7 +358,7 @@ officer shooting and a roadblock ≈ $83.
 - Keep 50 fps: check `fps_val` and `perf_max` after changing the main loop.
 - Every version merged into main gets a GitHub release with the .d64, .t64
   and .prg (the README links to the latest): bump `version.asm`, push main,
-  then `powershell -ExecutionPolicy Bypass -File toolselease.ps1` (builds,
+  then `powershell -ExecutionPolicy Bypass -File tools/release.ps1` (builds,
   tags `v<version>` if needed, creates the release or replaces its files).
 
 ## Ideas on the list
