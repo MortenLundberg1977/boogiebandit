@@ -1645,7 +1645,8 @@ cb_soft:
 
 
 // ---------------------------------------------------------------- thrown out
-// a crash into a cab at THROW_SPEED or more: the car stops dead where it is
+// a crash into a cab or a parked car at THROW_SPEED or more (car_bounce,
+// dd_bounce): the car stops dead where it is
 // and Vinnie flies on in its direction (1.5 x its speed, slowing by 1/16 a
 // frame: about three car lengths), tumbling, until FLY_FRAMES are over or
 // he hits a wall; then he is on foot (the car can be taken again)
@@ -1749,7 +1750,10 @@ fs_x:
     jsr man_try_x
     lda t3
     bne fs_x
-    beq fs_wall
+    lda #0
+    jsr fly_over
+    bcs fs_x
+    bcc fs_wall
 fs_y0:
     lda fay                         // y
     clc
@@ -1772,15 +1776,86 @@ fs_y:
     jsr man_try_y
     lda t3
     bne fs_y
+    lda #1
+    jsr fly_over
+    bcs fs_y
 fs_wall:
     lda #0                          // against a wall: he stops there
     sta fly
     rts
 fs_slow:
+    ldx #3                          // still over a parked car: no landing yet,
+!:  lda man_xl,x                    // no slowing down
+    sta bx_l,x
+    dex
+    bpl !-
+    jsr box_blocked
+    beq !+
+    inc fly
+    rts
+!:
     ldx #0
     jsr fv_less
     ldx #2
     jmp fv_less
+// in flight, blocked: over a parked car he flies on (a = 0: x, 1: y; bx/by
+// the spot tried, t2 the direction). Looks 3 pixels further: a parked car
+// or open ground -> he moves there anyway (carry set); a building -> no.
+fly_over:
+    tay
+    lda t2                          // +-3 on that axis
+    asl
+    clc
+    adc t2
+    sta t0
+    ldx #0
+    cpy #0
+    beq !+
+    ldx #2
+!:  lda bx_l,x                      // (bx_l, bx_h, by_l, by_h)
+    clc
+    adc t0
+    sta px_l,x
+    lda t0
+    and #$80
+    beq !+
+    lda #$ff
+!:  adc bx_h,x
+    sta px_h,x
+    txa                             // the other axis as it is
+    eor #2
+    tax
+    lda bx_l,x
+    sta px_l,x
+    lda bx_h,x
+    sta px_h,x
+    jsr map_addr
+    bcs fo_no
+    lda (zp0),y
+    pha
+    jsr park_find
+    tay
+    pla
+    cpy #0
+    bne fo_go
+    tax
+    lda class_tab,x
+    and #2
+    bne fo_no
+fo_go:
+    lda bx_l
+    sta man_xl
+    lda bx_h
+    sta man_xh
+    lda by_l
+    sta man_yl
+    lda by_h
+    sta man_yh
+    sec
+    rts
+fo_no:
+    clc
+    rts
 // ---------------------------------------------------------------- arrests, timer
 bust:
     jsr impound

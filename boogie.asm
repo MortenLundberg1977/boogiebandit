@@ -37,7 +37,7 @@
 .const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
 .const SP_GUARD = 236             // + dir*2 + step
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
-.const TAIL_PAGES = 9            // the tables moved out of the program (see tail_src)
+.const TAIL_PAGES = 8            // the tables moved out of the program (see tail_src)
 .const TEMP = $e000               // where they wait during start-up
 .const BLOCKS = $8000            // the city block designs (512 bytes each), then
 .const PRIV = BLOCKS + NBLOCKS * 512   // NPRIV private copies, then the grid
@@ -76,8 +76,9 @@
 .const ACCEL = 6
 .const BRAKE = 14
 .const DRAG = 3
-.const ROB_FRAMES = 200         // 4 seconds
-.const BUBBLE_FRAMES = 40         // five bubbles a robbery
+.const ROB_FRAMES = 200         // 4 seconds in a card shop
+.const BANK_FRAMES = 150        // 3 seconds in a bank
+.const BUBBLE_FRAMES = 30         // a bubble every 0.6 s
 .const SFX_POW = 0
 .const SFX_CRASH = 1
 .const SFX_CHING = 2
@@ -2095,6 +2096,43 @@ dd_bumped:
     sta spd_h
     jmp dd_frame
 dd_bounce:
+    jsr abs_speed                   // into a parked car this fast: Vinnie
+    lda t1                          // goes through the windscreen
+    cmp #>THROW_SPEED
+    bcc dd_soft
+    lda vx_h                        // (the character 4 frames ahead)
+    asl
+    asl
+    sta t2
+    clc
+    adc car_xl
+    sta px_l
+    lda t2
+    and #$80
+    beq !+
+    lda #$ff
+!:  adc car_xh
+    sta px_h
+    lda vy_h
+    asl
+    asl
+    sta t2
+    clc
+    adc car_yl
+    sta py_l
+    lda t2
+    and #$80
+    beq !+
+    lda #$ff
+!:  adc car_yh
+    sta py_h
+    jsr map_addr
+    bcs dd_soft
+    lda (zp0),y
+    jsr park_find
+    beq dd_soft
+    jmp throw_out
+dd_soft:
     jsr abs_speed                   // bounce back a little
     lda t1
     beq !+
@@ -2776,6 +2814,33 @@ dw_done:
     rts
 
 
+// character a a part of a parked car? a = $80 + kind * 8 + row * 2 + column
+// (its index in park_chars: kind * 6 + row * 2 + column), else 0
+park_find:
+    ldx #5 * 6 - 1
+!:  cmp park_chars,x
+    beq !+
+    dex
+    bpl !-
+    lda #0
+    rts
+!:  ldy #$80 - 8                    // kind * 8 + $80 in y, the rest in a
+    txa
+    sec
+!:  iny
+    iny
+    iny
+    iny
+    iny
+    iny
+    iny
+    iny
+    sbc #6
+    bcs !-
+    adc #6
+    sty t2
+    ora t2
+    rts
 // ---------------------------------------------------------------- car theft
 // fire on foot with a parked car in the 3 x 3 characters around the bandit:
 // he steals it (his own car, if any, is left for good). Carry set if he did.
@@ -2812,8 +2877,7 @@ ts_col:
     lda ts_c
     jsr map_at
     lda (zp0),y
-    tax
-    lda park_tab,x
+    jsr park_find
     bne ts_found
     inc ts_c
     dec ts_m
@@ -3031,10 +3095,15 @@ man_try_y:
 start_rob:
     lda #ST_ROB
     sta state
-    lda #<ROB_FRAMES
-    sta rob_l
-    lda #>ROB_FRAMES
-    sta rob_h
+    ldx #<ROB_FRAMES                // (a card shop)
+    ldy #>ROB_FRAMES
+    lda target
+    cmp #16
+    bcs !+
+    ldx #<BANK_FRAMES               // a bank: quicker
+    ldy #>BANK_FRAMES
+!:  stx rob_l
+    sty rob_h
     lda #1
     sta bub_cd
     lda #0
@@ -4773,7 +4842,6 @@ bubble_dx:  .byte 256 - 6, 5, 256 - 2, 6, 0
 bubble_dy:  .byte 256 - 8, 256 - 10, 256 - 12, 256 - 9, 256 - 11
 sqr_lo:     .fill 512, <floor(i * i / 4)
 sqr_hi:     .fill 512, >floor(i * i / 4)
-park_tab:   .fill 256, parkInfo.get(i)
 park_chars: .fill 30, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
 kind6:      .byte 0, 6, 12, 18, 24
 kind_col:   .byte $ff, 1, 0, 0, 15  // stolen cab ($ff: its band's colour), white car, black cars, grey car

@@ -16,8 +16,8 @@ The hero is Vinnie "Boogie" Marchetti (named on the high score page:
 `STARRING VINNIE "BOOGIE" MARCHETTI`; the font has a `"` glyph, `@"..."` strings
 in KickAssembler for it). Drive the red sedan through a scrolling 256 x 256 character city (built from blocks, see "The city") to the bank
 the arrow (lower left) points at; a green marker bounces over its door. Fire
-(when nearly stopped) gets out; walk into the door: a 4 second robbery with
-comic bubbles (KAPOW!, BLAM!, ...), five per robbery, random word and colour.
+(when nearly stopped) gets out; walk into the door: a robbery (3 seconds in a bank, `BANK_FRAMES`; 4 in a card shop, `ROB_FRAMES`) with
+comic bubbles (KAPOW!, BLAM!, ...), one every 0.6 s (`BUBBLE_FRAMES`), random word and colour.
 The bandit comes out with a loot bag ($1,000-$4,700; 10 x the seconds left
 on the job timer go to the score at once), the next bank is chosen (target + 3
 of 16), one more wanted
@@ -150,7 +150,12 @@ the car stops dead, he flies on in its direction at 1.5 x its speed, slowing
 by 1/16 a frame (`fv`, `fax`/`fay`), tumbling (a quarter turn every 4 frames)
 for `FLY_FRAMES` (32: about 52 pixels, three car lengths) or until a wall
 stops him (`fly_step`, run by `do_walk` while `fly` is not 0); then he is on
-foot and can get back in. Parked cars along the curbs
+foot and can get back in. Running head-on into a parked car that fast
+(`dd_bounce` looks 4 frames ahead with `park_find`) throws him too: in flight
+he passes over parked cars (`fly_over`: a parked car or open ground 3 pixels
+ahead lets him through, a building stops him) and does not land on one
+(`fs_slow` keeps him flying, without slowing, while his box is blocked).
+Parked cars along the curbs
 and in the parking lots are cabs (in the colour of their block row), white,
 grey and black cars and black
 ones with coloured stripes (`parkedCars` in gfx_city.asm, picked from the
@@ -254,7 +259,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 14 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 30 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
@@ -270,7 +275,7 @@ into characters and de-duplicated.
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
   packed city blocks (`map_rle`, `MAP_AREA` = at least 6001 bytes + `TAIL_PAGES`
-  pages, padded: only needed at start-up), and after it the 2,290 bytes of
+  pages, padded: only needed at start-up), and after it the 2,042 bytes of (8 pages; parked cars are found by searching `park_chars` with `park_find`, no 256-byte table)
   tables (`sin_tab` to `kind_col`: `tail_src` in the start-up data,
   assembled for `TAIL` = `map_rle` + 6001, parked at $e000 during start-up
   and copied there once the blocks are unpacked; `TAIL_PAGES`, asserts check
