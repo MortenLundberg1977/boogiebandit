@@ -3,7 +3,7 @@
 *New York, 1977. The disco never stops, and neither do you.*
 
 A top-down getaway game for the Commodore 64, written in 6502 assembly. Drive
-a 70s sedan through a smooth-scrolling New York, pull the job at the bank the
+a 70s sedan through a big smooth-scrolling New York, pull the job at the bank the
 arrow points to (KAPOW! ZOWIE! KACHING!), shake off the police, change cars or
 get a new paint job, and bring the loot to your friend's house in the suburb.
 
@@ -22,7 +22,8 @@ get a new paint job, and bring the loot to your friend's house in the suburb.
   you walk; get to the car, or around a
   block, before he grabs you.
   Lose them all and you get a $500 bonus. If one catches you, you're BUSTED!
-- Rob banks and card shops (CARDS sign with a playing card; a smaller take
+- The city is 8 avenues by 16 streets, with 16 banks and 16 card shops to
+  rob (CARDS sign with a playing card; a smaller take
   of $200-$900). The first target is different each game.
 - The loot only counts once it is at your friend's house, out in the green
   suburb at the south end of town (the yellow roof, bottom left; yellow on the
@@ -42,7 +43,7 @@ get a new paint job, and bring the loot to your friend's house in the suburb.
   slow car. After that, officers stop, get out and shoot (dodge the bullets
   or duck behind a building), and from the third job on they set up
   roadblocks ahead of you. You can just squeeze past one on the sidewalk.
-- Three paint garages (look for the yellow PAINT sign; small yellow marks on
+- Six paint garages (look for the yellow PAINT sign; small yellow marks on
   the city map). Stop inside the spray booth: $300 for a new colour, paid
   from the loot you carry (else from your score; always a
   different one; it takes a second). Your car is then no longer the getaway

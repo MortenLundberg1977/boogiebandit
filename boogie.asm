@@ -37,15 +37,22 @@
 .const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
 .const SP_GUARD = 236             // + dir*2 + step
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
-.const TAIL_PAGES = 11            // the tables moved out of the program (see tail_src)
+.const TAIL_PAGES = 9            // the tables moved out of the program (see tail_src)
 .const TEMP = $e000               // where they wait during start-up
-.const MAP = $8000
+.const BLOCKS = $8000            // the city block designs (512 bytes each), then
+.const PRIV = BLOCKS + NBLOCKS * 512   // NPRIV private copies, then the grid
+.const GRID = PRIV + NPRIV * 512        // (GW x GH: the page of each block)
+.const MT_CB = GRID + 256         // map_at tables (see blockBytes)
+.const MT_CY = MT_CB + 256
+.const MT_RG = MT_CY + 256
+.const MT_RH = MT_RG + 256
+.const MT_RL = MT_RH + 256
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
 .const IRQ_LINE = 250
 
-.const CAMX_MAX = 711           // screen buffer = map columns 88..127
-.const CAMY_MAX = 831           // map rows 103..127
+.const CAMX_MAX = 2048 - 313    // the world is 256 x 256 characters
+.const CAMY_MAX = 2048 - 193
 
 .const ST_DRIVE = 0
 .const ST_WALK = 1
@@ -109,7 +116,7 @@
 .const JOB_MIN = $30
 .const START_X = 81 * 8
 .const START_Y = 62 * 8
-.const NSTEAL = 32               // stolen cars remembered (a power of 2)
+
 
 // ---------------------------------------------------------------- zero page
 .var zpNext = $02
@@ -344,16 +351,26 @@
 .label m_song = zalloc(1)         // music: 0 the tune, 1 the chase tune
 .label sh_gline = zalloc(1)       // the suburb: raster line before its first row
 .label lv_gline = zalloc(1)       // (0: not on screen), prepared / shown
+.label ma_c = zalloc(1)           // map_at: column + 13, row + 5, the row (kept),
+.label ma_r = zalloc(1)           // the grid index
+.label ma_x = zalloc(1)
+.label ma_g = zalloc(1)
 .errorif zpNext > $100, "zero page full"
 .errorif car_yh - car_xf != 5, "car_xf..car_yh must be in a row (save_car)"
 
 // arrays in $0200-$03ff
-.label ring_lo = $0200
-.label ring_hi = $0280
+// $0200-$02ff: the city map screen's row buffer (MMBUF, screens.asm)
 .var bss = $0300
 .function balloc(n) {
     .var a = bss
     .eval bss = bss + n
+    .return a
+}
+// more working bytes at $0280-$02ff (the city map screen only uses $0200-$027f)
+.var bss2 = $0280
+.function b2alloc(n) {
+    .var a = bss2
+    .eval bss2 = bss2 + n
     .return a
 }
 .label m_ord = balloc(3)
@@ -403,6 +420,25 @@
 .label safe_in = balloc(1)         // 1 while the car stands in the friend's driveway
 .label paint_lock = balloc(1)      // 1 after a paint job until the car leaves the booth
 .label arrow_mode = balloc(1)      // the arrow points to: 0 the next job, 1 the friend's house, 2 a paint garage
+.label ma_v = b2alloc(1)            // map_wr: the character, column, row
+.label ma_wc = b2alloc(1)
+.label ma_wr = b2alloc(1)
+.label priv_gi = balloc(NPRIV)     // the grid index each private block copy is for ($ff: free)
+.label priv_next = balloc(1)       // the private copy to use next
+.label bb_r = b2alloc(1)            // box_blocked: the row, the block column
+.label bb_y = b2alloc(1)
+.label ts_c = b2alloc(1)            // try_steal: the column looked at
+.label mf_c = b2alloc(1)            // map_fill: column, row, index
+.label mf_r = b2alloc(1)
+.label mf_i = b2alloc(1)
+.label dc_c = b2alloc(1)            // draw_col: column, row, rows left, y
+.label dc_r = b2alloc(1)
+.label dc_n = b2alloc(1)
+.label dc_y = b2alloc(1)
+.label dr_lo = b2alloc(1)           // draw_row: the screen row, where the block ends
+.label dr_hi = b2alloc(1)
+.label dr_end = b2alloc(1)
+.label dc_k = b2alloc(1)
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -452,13 +488,6 @@ start:
     bne !-
     lda #$a5
     sta rng
-
-    // no skid marks yet
-    lda #0
-    ldx #127
-!:  sta ring_hi,x
-    dex
-    bpl !-
 
     // the tables for later (start-up data, maybe past $8000 where the map
     // goes) wait at TEMP until the packed map is free
@@ -531,9 +560,9 @@ start:
     sta zsrc
     lda #>map_rle
     sta zsrc + 1
-    lda #<MAP
+    lda #<BLOCKS
     sta zdst
-    lda #>MAP
+    lda #>BLOCKS
     sta zdst + 1
     jsr unpack
     // the screen shift A->B goes where the packed map was
@@ -781,8 +810,12 @@ irq_noframe:
     lda #>irq_split
     sta $ffff
 irq_common:
-    lda #WALK_COL                   // sidewalks grey at the top of the screen
-    sta $d022
+    ldy #WALK_COL                   // sidewalks grey at the top of the screen
+    lda lv_gline                    // (green when the suburb fills it from
+    cmp #1                          // the top)
+    bne !+
+    ldy #LAWN_COL
+!:  sty $d022
     inc vbl
     dec fps_tick
     bne !+
@@ -1152,22 +1185,6 @@ game_start:
     sta $d02d
     jsr city_colours
 
-    // wash away the skid marks of the last game
-    ldx #127
-!:  lda ring_hi,x
-    beq gs_ring
-    sta zp1 + 1
-    lda ring_lo,x
-    sta zp1
-    ldy #0
-    lda #ROADCH
-    sta (zp1),y
-    lda #0
-    sta ring_hi,x
-gs_ring:
-    dex
-    bpl !-
-
     lda #<START_X
     sta car_xl
     lda #>START_X
@@ -1220,24 +1237,7 @@ gs_ring:
     lda #1                          // level 1
     sta level
     lda #0
-    ldx #NSTEAL - 1                 // (in the map only: it is drawn later)
-gs_steal:
-    lda steal_kind,x
-    bmi !+
-    sta st_kind
-    lda steal_col,x
-    sta st_col
-    lda steal_row,x
-    sta st_row
-    txa
-    pha
-    jsr put_car
-    pla
-    tax
-    lda #$ff
-    sta steal_kind,x
-!:  dex
-    bpl gs_steal
+    jsr grid_reset                  // the city as built: stolen cars are back
     lda #1
     sta have_car
     sta st_scr
@@ -1432,6 +1432,15 @@ gl_tl:      .fill glTL.size(), glTL.get(i)
 gl_tr:      .fill glTR.size(), glTR.get(i)
 gl_bl:      .fill glBL.size(), glBL.get(i)
 gl_br:      .fill glBR.size(), glBR.get(i)
+// the city grid as built (GRID is reset from it at every game start) and
+// grid row offsets; a row of wall for the edges of the world (both in one
+// page: map_at's callers check the page)
+grid_orig:  .fill GW * GH, (BLOCKS >> 8) + 2 * grid.get(i)
+gmul:       .fill GH, i * GW
+.align 64
+wall_row:   .fill 32, WALLCH
+wall_sub:   .fill 32, WALL_SUB
+.errorif floor(wall_row / 256) != floor((wall_sub + 31) / 256), "the wall rows must share a page"
 // the guard sprites (8, copied to GUARDSPR by gen_shift_ba)
 guard_spr:  .fill guardSpr.size(), guardSpr.get(i)
 .errorif guardSpr.size() != 512, "the guard is 8 sprites"
@@ -2020,51 +2029,157 @@ ms_diff:
 !:  rts
 
 // ---------------------------------------------------------------- the map
-// map_addr: px/py (16-bit world pixels) -> zp0 = map address, mcol, mrow.
-// Carry set if outside the map.
+// The city is a grid of blocks (gfx_city.asm): world column c, row r is
+// character (c + 13) & 31, (r + 5) & 15 of block GRID[((r + 5) >> 4) * GW +
+// ((c + 13) >> 5)]; GRID holds the page of each block (BLOCKS + 512 x
+// design, or a private copy at PRIV). The two characters at each edge of
+// the world are wall.
+//
+// map_at: column a, row x -> (zp0),y is the map character (x is kept).
+// Going on to y + 1 is the next column up to the block's edge (y = 31).
+map_at:
+    tay
+    cpx #2
+    bcc ma_wall
+    cpx #254
+    bcs ma_wall
+    lda MT_CB,y                     // block column ($ff: the wall)
+    bmi ma_wall
+    clc
+    adc MT_RG,x                     // + grid row
+    sta ma_g
+    lda MT_CY,y                     // the column in the block
+    sta ma_c
+    ldy ma_g
+    lda GRID,y
+    clc
+    adc MT_RH,x
+    sta zp0 + 1
+    lda MT_RL,x
+    sta zp0
+    ldy ma_c
+    rts
+ma_wall:                            // a row of wall (green-free in the suburb)
+    tya                             // (y = the column)
+    pha
+    ldy #<wall_row
+    cpx #SUB_ROW
+    bcc !+
+    ldy #<wall_sub
+!:  sty zp0
+    lda #>wall_row
+    sta zp0 + 1
+    pla
+    cmp #2                          // left edge: to column 2
+    bcs !+
+    adc #30
+    tay
+    rts
+!:  cmp #254                        // right edge: to the end
+    bcc !+
+    and #31
+    tay
+    rts
+!:  clc                             // top / bottom: block by block
+    adc #-BLK_X0
+    and #31
+    tay
+    rts
+
+// map_addr: px/py (16-bit world pixels) -> mcol, mrow and (zp0),y = the
+// map character. Carry set if outside the world.
 map_addr:
     lda px_h
-    cmp #4
+    cmp #8
     bcs !+
     lda py_h
-    cmp #4
+    cmp #8
     bcs !+
     lda px_l
-    lsr
-    lsr
-    lsr
     sta mcol
     lda px_h
-    asl
-    asl
-    asl
-    asl
-    asl
-    ora mcol
-    sta mcol
+    lsr
+    ror mcol
+    lsr
+    ror mcol
+    lsr
+    ror mcol
     lda py_l
-    lsr
-    lsr
-    lsr
     sta mrow
     lda py_h
-    asl
-    asl
-    asl
-    asl
-    asl
-    ora mrow
-    sta mrow
     lsr
-    ora #>MAP
-    sta zp0 + 1
-    lda #0
-    ror
-    ora mcol
-    sta zp0
+    ror mrow
+    lsr
+    ror mrow
+    lsr
+    ror mrow
+    ldx mrow
+    lda mcol
+    jsr map_at
     clc
 !:  rts
 
+// map_wr: character ma_v at column a, row x into the map. The block designs
+// are shared, so the block gets a private copy first (one of NPRIV, the
+// oldest goes back to its design).
+map_wr:
+    sta ma_wc
+    stx ma_wr
+    jsr map_at
+    lda zp0 + 1
+    cmp #>PRIV
+    bcs mw_put                      // already a private copy
+    ldx priv_next
+    lda priv_gi,x                   // that copy is taken: its block is the
+    bmi !+                          // shared design again
+    tay
+    lda grid_orig,y
+    sta GRID,y
+!:  ldy ma_g
+    tya
+    sta priv_gi,x
+    lda GRID,y                      // copy the design (512 bytes)
+    sta zsrc + 1
+    txa
+    asl
+    clc
+    adc #>PRIV
+    sta zdst + 1
+    sta GRID,y
+    lda #0
+    sta zsrc
+    sta zdst
+    ldx #2
+    jsr copy_pages
+    lda priv_next
+    clc
+    adc #1
+    and #NPRIV - 1
+    sta priv_next
+    ldx ma_wr
+    lda ma_wc
+    jsr map_at
+mw_put:
+    lda ma_v
+    sta (zp0),y
+    rts
+
+// the city as built (a new game): the grid back from grid_orig, no
+// private copies
+grid_reset:
+    ldx #GW * GH
+!:  lda grid_orig - 1,x
+    sta GRID - 1,x
+    dex
+    bne !-
+    lda #$ff
+    ldx #NPRIV - 1
+!:  sta priv_gi,x
+    dex
+    bpl !-
+    lda #0
+    sta priv_next
+    rts
 // box_blocked: box of half size bhw (at most 7) around (bx, by) against the
 // class bits bmask. Returns A != 0 (Z clear) if blocked.
 box_blocked:
@@ -2115,26 +2230,39 @@ box_blocked:
 bb_hit:
     lda #1
     rts
-bb_row:
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
-    ldy bc0
+bb_row:                             // x = row: is column bc0 or bc1 blocked?
+    stx bb_r
+    lda bc0
+    jsr map_at
+    sty bb_y
     lda (zp0),y
     tax
     lda class_tab,x
     and bmask
-    bne !+
-    ldy bc1
+    bne bb_ret
+    lda bc1                         // bc1 in the same block: no new lookup
+    sec
+    sbc bc0
+    clc
+    adc bb_y
+    cmp #32
+    bcs !+
+    tay
     lda (zp0),y
+    jmp bb_cls
+!:  ldx bb_r
+    lda bc1
+    jsr map_at
+    lda (zp0),y
+bb_cls:
     tax
     lda class_tab,x
     and bmask
-!:  rts
+bb_ret:
+    rts
 // a = high, bt_l = low byte of a world coordinate -> a = map cell, carry set if outside
 to_cell:
-    cmp #4
+    cmp #8
     bcs !+
     sta bt_h
     lda bt_l
@@ -2225,48 +2353,14 @@ mark_wheel:                         // a/y = signed offset from the car centre
     sta py_h
     jsr map_addr
     bcs mw_done
-    ldy #0
     lda (zp0),y
-    cmp #ROADCH                     // marks only on plain asphalt
-    bne mw_done
-    ldx car_frame
+    cmp #ROADCH                     // marks only on plain asphalt (on the
+    bne mw_done                     // screen only: the blocks are shared,
+    ldx car_frame                   // they go when they scroll away)
     lda skid_tab,x
-    sta (zp0),y
     jsr screen_cell
-    // remember it; the oldest of 128 marks is washed away
-    ldx ring_pos
-    lda ring_hi,x
-    beq mw_store
-    sta zp1 + 1
-    lda ring_lo,x
-    sta zp1
-    lda #ROADCH
-    ldy #0
-    sta (zp1),y
-    lda zp1 + 1                     // map address -> column/row
-    and #$7f
-    sta mrow
-    lda zp1
-    asl
-    rol mrow
-    lda zp1
-    and #$7f
-    sta mcol
-    lda #ROADCH
-    jsr screen_cell
-mw_store:
-    ldx ring_pos
-    lda zp0
-    sta ring_lo,x
-    lda zp0 + 1
-    sta ring_hi,x
-    inx
-    txa
-    and #$7f
-    sta ring_pos
 mw_done:
     rts
-
 // ---------------------------------------------------------------- on foot
 try_exit:                           // carry set if the bandit got out
     ldx car_frame
@@ -2488,20 +2582,19 @@ try_steal:
     lda #3
     sta ts_n
 ts_row:
-    ldx st_row
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
-    ldy t3
+    lda t3
+    sta ts_c
     lda #3
     sta ts_m
 ts_col:
+    ldx st_row
+    lda ts_c
+    jsr map_at
     lda (zp0),y
     tax
     lda park_tab,x
     bne ts_found
-    iny
+    inc ts_c
     dec ts_m
     bne ts_col
     inc st_row
@@ -2513,7 +2606,7 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     sta t1
     and #1
     sta t2
-    tya
+    lda ts_c
     sec
     sbc t2
     sta st_col
@@ -2531,43 +2624,11 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     lsr
     and #3
     sta st_kind
-    // remember it (it is parked there again next game); when the list is
-    // full the oldest one comes back now
-    ldx steal_pos
-    lda steal_kind,x
-    bmi !+
-    lda st_col
-    pha
-    lda st_row
-    pha
+    // it comes off the street (in a private copy of its block: it is back
+    // next game, or when that copy is needed for another block)
     lda st_kind
     pha
-    lda steal_col,x
-    sta st_col
-    lda steal_row,x
-    sta st_row
-    lda steal_kind,x
-    sta st_kind
-    jsr put_car
-    pla
-    sta st_kind
-    pla
-    sta st_row
-    pla
-    sta st_col
-    ldx steal_pos
-!:  lda st_col
-    sta steal_col,x
-    lda st_row
-    sta steal_row,x
-    lda st_kind
-    sta steal_kind,x
-    pha
-    inx
-    txa
-    and #NSTEAL - 1
-    sta steal_pos
-    lda #$ff                        // off the street
+    lda #$ff
     sta st_kind
     jsr put_car
     pla
@@ -2655,15 +2716,12 @@ pk_loop:
     adc ts_n
     tax
     lda park_chars,x
-!:  pha
+!:  sta ma_v
+    pha
     ldx mrow
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
-    ldy mcol
+    lda mcol
+    jsr map_wr
     pla
-    sta (zp0),y
     ldx st_scr
     beq !+
     jsr screen_cell
@@ -2798,7 +2856,7 @@ end_rob:
     sta bag
     // the loot: a bank $1,000-$4,700, a card shop $200-$900 (BCD)
     lda target
-    cmp #8
+    cmp #16                         // targets 16-31 are card shops
     bcc er_bank
     jsr rng_next
     and #$07
@@ -3080,22 +3138,13 @@ cb_row:
     clc
     adc disp_cy
     tax
-    lda mrow_lo,x
-    clc
-    adc disp_cx
-    sta zp0
-    lda mrow_hi,x
-    adc #0
-    sta zp0 + 1
-    lda zp0
+    lda disp_cx
     clc
     adc bub_x
-    sta zp0
-    bcc !+
-    inc zp0 + 1
-!:  ldy bub_w
+    jsr map_fill                    // (row x, from column a)
+    ldy bub_w
     dey
-!:  lda (zp0),y
+!:  lda tbuf,y
     sta (zp1),y
     lda #COLRAM
     sta (zdst),y
@@ -3325,11 +3374,18 @@ scroll_regs:
     tax
     lda #>(GREEN_BASE + SUB_ROW * 8)
     sbc cam_yh
+    bmi sr_all                      // above the screen: all of it green
     bne sr_none                     // below the screen
     cpx #IRQ_LINE
     bcs sr_none
+    cpx #GREEN_BASE + 1
+    bcc sr_all
     dex                             // the line before it
     stx sh_gline
+    rts
+sr_all:
+    lda #1                          // (1: green from the top)
+    sta sh_gline
     rts
 sr_none:
     lda #0
@@ -3621,62 +3677,173 @@ full_redraw:
 // draw screen row a of the back buffer from the map (camera ncx/ncy)
 draw_row:
     tax
-    clc
-    adc ncy
-    tay
-    lda mrow_lo,y
-    clc
-    adc ncx
-    sta zp0
-    lda mrow_hi,y
-    adc #0
-    sta zp0 + 1
     lda srow_lo,x
-    sta zp1
+    sta dr_lo
     lda srow_hi,x
     ora back_hi
-    sta zp1 + 1
-    ldy #39
-!:  lda (zp0),y
-    sta (zp1),y
-    dey
-    bpl !-
-    rts
-
-// draw screen column a of the back buffer from the map
-draw_col:
-    sta t0
-    ldy ncy
-    lda mrow_lo,y
+    sta dr_hi
+    txa
     clc
-    adc ncx
-    sta zp0
-    lda mrow_hi,y
-    adc #0
-    sta zp0 + 1
+    adc ncy
+    tax                             // the world row (map_at keeps it)
+    lda ncx
+    sta mf_c
     lda #0
+    sta mf_i                        // screen columns done
+dr_seg:
+    lda mf_c
+    jsr map_at
+    sty dc_y
+    lda dr_lo                       // zp1 = screen + done - y: the same y
+    clc                             // for the block row and the screen
+    adc mf_i
     sta zp1
-    lda back_hi
+    lda dr_hi
+    adc #0
     sta zp1 + 1
-    ldx #25
-!:  ldy t0
+    lda zp1
+    sec
+    sbc dc_y
+    sta zp1
+    bcs !+
+    dec zp1 + 1
+!:  lda #40                         // up to the block's edge or the end
+    sec
+    sbc mf_i
+    clc
+    adc dc_y
+    cmp #32
+    bcc !+
+    lda #32
+!:  sta dr_end
+dr_loop:
     lda (zp0),y
     sta (zp1),y
-    lda zp0                         // next map row (+128)
-    eor #$80
+    iny
+    cpy dr_end
+    bne dr_loop
+    tya
+    sec
+    sbc dc_y
+    clc
+    adc mf_i
+    sta mf_i
+    cmp #40
+    bcs !+
+    clc
+    adc ncx
+    sta mf_c
+    jmp dr_seg
+!:  rts
+
+// tbuf = the 40 map characters from column a of row x on (x is kept)
+map_fill:
+    sta mf_c
+    lda #0
+    sta mf_i
+mf_seg:
+    lda mf_c
+    jsr map_at
+    stx mf_r
+    ldx mf_i
+mf_loop:
+    lda (zp0),y
+    sta tbuf,x
+    inx
+    cpx #40
+    beq mf_done
+    iny
+    cpy #32
+    bne mf_loop
+    txa                             // the next block
+    sec
+    sbc mf_i
+    clc
+    adc mf_c
+    sta mf_c
+    stx mf_i
+    ldx mf_r
+    jmp mf_seg
+mf_done:
+    ldx mf_r
+    rts
+
+// draw screen column a of the back buffer from the map: down one column of
+// a block, 8 rows a run (one page), with the same y for block and screen
+draw_col:
+    sta t0
+    clc
+    adc ncx
+    sta dc_c
+    lda ncy
+    sta dc_r
+    lda t0
+    sta dr_lo
+    lda back_hi
+    sta dr_hi
+    lda #25
+    sta dc_n
+dc_seg:
+    ldx dc_r
+    lda dc_c
+    jsr map_at
+    sty dc_y
+    lda dr_lo                       // zp1 = screen - y
+    sec
+    sbc dc_y
+    sta zp1
+    lda dr_hi
+    sbc #0
+    sta zp1 + 1
+    lda zp0 + 1                     // rows in this run: to the page's end
+    cmp #>wall_row                  // (the wall: one)
+    bne !+
+    lda #1
+    bne dc_k1
+!:  lda dc_r
+    clc
+    adc #-BLK_Y0
+    and #7
+    eor #7
+    clc
+    adc #1
+dc_k1:
+    cmp dc_n
+    bcc !+
+    lda dc_n
+!:  sta dc_k
+    tax
+dc_loop:
+    lda (zp0),y
+    sta (zp1),y
+    lda zp0
+    clc
+    adc #32
     sta zp0
-    bmi dc_nc
-    inc zp0 + 1
-dc_nc:
-    lda zp1                         // next screen row (+40)
+    lda zp1
     clc
     adc #40
     sta zp1
-    bcc dc_nc2
+    bcc !+
     inc zp1 + 1
-dc_nc2:
-    dex
-    bne !-
+!:  dex
+    bne dc_loop
+    lda zp1
+    clc
+    adc dc_y
+    sta dr_lo
+    lda zp1 + 1
+    adc #0
+    sta dr_hi
+    lda dc_r
+    clc
+    adc dc_k
+    sta dc_r
+    lda dc_n
+    sec
+    sbc dc_k
+    sta dc_n
+    bne dc_seg
     rts
 
 // The shift routines are generated at run time, fully unrolled:
@@ -4301,8 +4468,24 @@ hd_common:
 // =====================================================================
 
 
-.var mapPacked = rlePack(cityMap)
-map_rle:    .fill mapPacked.size(), mapPacked.get(i)
+// the block designs (packed; unpacked to BLOCKS at start-up), then room
+// for the A->B shift and the moved tables (TAIL) that go here afterwards
+.var blockBytes = List()
+.for (var b = 0; b < NBLOCKS; b++) .for (var i = 0; i < BW * BH; i++) .eval blockBytes.add(blocks.get(b).get(i))
+// then room for the private copies and the grid (filled at run time), then
+// the tables of map_at: per column the block column ($ff: wall) and the
+// column in the block, per row the grid row offset, the page (0 / 1) and
+// the offset in the page
+.for (var i = 0; i < NPRIV * 512 + 256; i++) .eval blockBytes.add(0)
+.for (var c = 0; c < 256; c++) .eval blockBytes.add((c < 2 || c >= 254) ? $ff : floor((c - BLK_X0) / 32))
+.for (var c = 0; c < 256; c++) .eval blockBytes.add(mod(c - BLK_X0, 32))
+.for (var r = 0; r < 256; r++) .eval blockBytes.add(floor((r - BLK_Y0) / 16) * GW)
+.for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(floor((r - BLK_Y0) / 8), 2))
+.for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(r - BLK_Y0, 8) * 32)
+.errorif MT_RL + 256 > $c000, "the map tables must end below $c000"
+.var mapPacked = rlePack(blockBytes)
+.const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
+map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0
 .var bmpPacked = rlePack(introBitmap)
 intro_bitmap: .fill bmpPacked.size(), bmpPacked.get(i)
 .var scrPacked = rlePack(introScreen)
@@ -4330,8 +4513,6 @@ tail_src:
 .pseudopc TAIL {
 tail_start:
 sin_tab:    .fill 256 + 64, (round(127 * sin(i * 2 * PI / 256)) + 256) & 255
-mrow_lo:    .fill 128, <(MAP + i * 128)
-mrow_hi:    .fill 128, >(MAP + i * 128)
 srow_lo:    .fill 25, <(i * 40)
 srow_hi:    .fill 25, >(i * 40)
 class_tab:  .fill 256, (i < charClass.size()) ? charClass.get(i) : 0
@@ -4356,9 +4537,6 @@ park_tab:   .fill 256, parkInfo.get(i)
 park_chars: .fill 24, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
 kind6:      .byte 0, 6, 12, 18
 kind_col:   .byte 7, 1, 0, 0        // stolen cab yellow, white car, black cars
-steal_col:  .fill NSTEAL, 0         // stolen cars, put back at the next game
-steal_row:  .fill NSTEAL, 0
-steal_kind: .fill NSTEAL, $ff
 tail_end:
 }
 
@@ -4368,8 +4546,7 @@ tail_end:
 .errorif tail_end - tail_start <= (TAIL_PAGES - 1) * 256 || tail_end - tail_start > TAIL_PAGES * 256, "set TAIL_PAGES to " + ceil((tail_end - tail_start) / 256)
 init_end:
 
-.print "Map packed: " + mapPacked.size() + " bytes, title: " + (bmpPacked.size() + scrPacked.size() + colPacked.size())
+.print "City: " + NBLOCKS + " block designs, packed " + mapPacked.size() + " bytes (area " + MAP_AREA + "), title: " + (bmpPacked.size() + scrPacked.size() + colPacked.size())
 .print "Program ends at $" + toHexString(program_end) + ", start-up data at $" + toHexString(init_end)
-.errorif program_end > MAP, "program overlaps the map at $8000"
+.errorif program_end > BLOCKS, "program overlaps the city blocks at $8000"
 .errorif init_end > $a000, "start-up data must end below $a000 (BASIC LOAD limit)"
-.errorif mapPacked.size() < 6001, "the packed map area must hold the A->B shift routine (6001 bytes)"

@@ -699,6 +699,7 @@ mm_spr:
     ror
     lsr t0
     ror
+    lsr                             // (2 characters a pixel)
     clc
     adc #24 + 96
     sec
@@ -718,6 +719,7 @@ mm_spr:
     ror
     lsr t0
     ror
+    lsr
     clc
     adc #50 + 16
     sec
@@ -747,16 +749,52 @@ mm_clear_row:
     bpl !-
     rts
 
+// the map screen samples the city: MMBUF[0, 2, ... 126] = the characters
+// of columns 0, 4, ... 252 of world row x; zp0 = MMBUF
+.const MMBUF = $0200
+mm_sample:
+    lda #0
+    sta mf_c
+    sta mf_i
+ms_seg:
+    lda mf_c
+    jsr map_at
+ms_loop:
+    lda (zp0),y
+    sty dc_y
+    ldy mf_i
+    sta MMBUF,y
+    iny
+    iny
+    sty mf_i
+    bmi ms_done
+    lda mf_c
+    clc
+    adc #4
+    sta mf_c
+    lda dc_y
+    clc
+    adc #4
+    tay
+    cpy #32
+    bcc ms_loop
+    bcs ms_seg
+ms_done:
+    lda #<MMBUF
+    sta zp0
+    lda #>MMBUF
+    sta zp0 + 1
+    rts
+
 mm_render:
     lda #0
     sta t5                          // map row
 mr_row:
-    ldx t5
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
-    txa
+    lda t5                          // world row 2 x t5, every 4th column
+    asl
+    tax
+    jsr mm_sample
+    lda t5
     lsr
     lsr
     lsr
@@ -837,8 +875,9 @@ mb_loop:
     lsr t0
     ror
     lsr
+    lsr                             // (the map: 4 columns a pixel)
     sec
-    sbc #2
+    sbc #1
     sta mb_x
     lda door_yh,x
     sta t0
@@ -849,13 +888,14 @@ mb_loop:
     ror
     lsr t0
     ror
+    lsr                             // (2 rows a pixel)
     sec
-    sbc #8
+    sbc #4
     sta mb_y
-    lda #8
+    lda #4
     sta mb_h
 mb_rows:
-    lda #5
+    lda #3
     sta mb_w
     lda mb_x
     sta t0

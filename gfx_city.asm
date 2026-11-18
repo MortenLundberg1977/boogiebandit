@@ -12,7 +12,8 @@
 .const CL_SOLID = 3
 .const CL_DOOR = 7              // 4 = bank door
 .const CL_PAINT = 8             // the spray booth of a paint garage (drivable)
-.const SUB_ROW = 107            // the suburb: map rows 107-127 (see "the suburb")
+.const SUB_ROW = 13 * 16 - 5    // the suburb: world rows 203-255 (block rows 13-16, SUB_J)
+.var inSub = false              // the city builder is drawing a suburb block
 
 .var chars = List()
 .var charKeys = Hashtable()
@@ -182,7 +183,7 @@
 // (the rest of the city stays the same)
 .function parked(x, y) {
     .var i = mod(x * 5 + y * 3 + floor(y / 7), parkedCars.size())
-    .if (y >= SUB_ROW && (i == 1 || i == 4)) .return carB     // (a white car would be green there)
+    .if (inSub && (i == 1 || i == 4)) .return carB            // (a white car would be green there)
     .var car = parkedCars.get(i)
     .return car
 }
@@ -265,11 +266,25 @@
 .var TREE = subStamp(treeArt, CL_SOLID)
 .var HEDGE = subStamp(List().add("wbwb", "bbbb", "bwbb", "bbbb", "bbwb", "bbbb", "wbbw", "wwww"), CL_SOLID).get(0).get(0)
 
-// ---------------------------------------------------------------- the map
-.const MW = 128
-.const MH = 128
+// ---------------------------------------------------------------- the city: blocks
+// The city is 256 x 256 characters, built from blocks of 32 x 16: a lot (26
+// x 11, top left) with its avenue on the right (columns 26-31) and its
+// street below (rows 11-15). Block (i, j) starts at world column 32 i - 13
+// and row 16 j - 5, so the roads are where they always were: avenue
+// centres x = 128 + 256 k, street centres y = 68 + 128 j. The world is a
+// grid of 9 x 17 blocks (the outer ones only partly shown; the two
+// characters at each edge of the world are wall, done by map_at). Each
+// grid cell names a block design; the designs are drawn here.
+.const BW = 32                  // a block: 32 x 16 characters
+.const BH = 16
+.const GW = 9                   // the grid of blocks
+.const GH = 17
+.const BLK_X0 = -13             // world column / row of block (0, 0)
+.const BLK_Y0 = -5
+.var MW = BW
+.var MH = BH
 .var cityMap = List()
-.for (var i = 0; i < MW * MH; i++) .eval cityMap.add(WALLCH)
+.for (var i = 0; i < BW * BH; i++) .eval cityMap.add(WALK)
 .function mset(x, y, c) {
     .if (x >= 0 && x < MW && y >= 0 && y < MH) .eval cityMap.set(y * MW + x, c)
     .return 0
@@ -293,58 +308,11 @@
     }
     .return 0
 }
+.const SH = 5                   // streets: 5 rows high (avenues 6 wide)
 
-.var AVX = List().add(13, 45, 77, 109)                     // avenues: 6 columns wide
-.const SH = 5                                               // streets: 5 rows high
-.var STY = List()
-.for (var j = 0; j < 8; j++) .eval STY.add(6 + 16 * j)
-
-// roads
-.for (var k = 0; k < AVX.size(); k++) .eval mfill(AVX.get(k), 2, 6, 124, ROADCH)
-.for (var j = 0; j < STY.size(); j++) .eval mfill(2, STY.get(j), 124, SH, ROADCH)
-.function nearStreet(y) {
-    .for (var j = 0; j < STY.size(); j++) .if (y >= STY.get(j) - 1 && y <= STY.get(j) + SH) .return true
-    .return false
-}
-.function nearAvenue(x) {
-    .for (var k = 0; k < AVX.size(); k++) .if (x >= AVX.get(k) - 1 && x <= AVX.get(k) + 6) .return true
-    .return false
-}
-// markings: double yellow on the avenues, dashes on the streets, crosswalks
-.for (var k = 0; k < AVX.size(); k++) {
-    .var ax = AVX.get(k)
-    .for (var y = 2; y < 126; y++) {
-        .if (!nearStreet(y)) {
-            .eval mset(ax + 2, y, AVL)
-            .eval mset(ax + 3, y, AVR)
-        }
-    }
-    .for (var j = 0; j < STY.size(); j++) {
-        .eval mfill(ax, STY.get(j) - 1, 6, 1, ZEB_V)
-        .eval mfill(ax, STY.get(j) + SH, 6, 1, ZEB_V)
-    }
-}
-.for (var j = 0; j < STY.size(); j++) {
-    .var sy = STY.get(j)
-    .for (var x = 2; x < 126; x++) {
-        .if (!nearAvenue(x) && mod(floor(x / 2), 2) == 0) .eval mset(x, sy + floor(SH / 2), STDASH)
-    }
-    .for (var k = 0; k < AVX.size(); k++) {
-        .eval mfill(AVX.get(k) - 1, sy, 1, SH, ZEB_H)
-        .eval mfill(AVX.get(k) + 6, sy, 1, SH, ZEB_H)
-    }
-}
-
-// lots between the roads
-.var LX0 = List().add(2, 19, 51, 83, 115)
-.var LX1 = List().add(12, 44, 76, 108, 125)
-.var LY0 = List().add(2, 11, 27, 43, 59, 75, 91, 107, 123)    // after a street and its crosswalk
-.var LY1 = List().add(5, 21, 37, 53, 69, 85, 101, 117, 125)
-
-// houses with lawns and trees instead of city blocks (in the suburb)
+// the buildings of a lot: city blocks, or houses with lawns in the suburb
 .function houses(bx0, by0, bw, bh) {
     .eval mfill(bx0, by0, bw, bh, WALK)
-    .if (bh < 4) .return mfill(bx0, by0 + bh - 1, bw, 1, HEDGE)     // backyards: a hedge
     .var x = bx0
     .while (x + 4 <= bx0 + bw) {
         .var big = (x + 5 <= bx0 + bw) && rnd(2) == 0
@@ -354,9 +322,8 @@
     }
     .return 0
 }
-
 .function buildings(bx0, by0, bw, bh) {
-    .if (by0 >= SUB_ROW) .return houses(bx0, by0, bw, bh)
+    .if (inSub) .return houses(bx0, by0, bw, bh)
     .var x = bx0
     .while (x < bx0 + bw) {
         .var w = 4 + rnd(4)
@@ -371,135 +338,8 @@
     .return 0
 }
 
-// banks: (lot column, lot row); doors face the street below
-.var bankLots = List().add(List().add(1, 1), List().add(3, 1), List().add(2, 3), List().add(1, 4),
-                           List().add(3, 4), List().add(2, 6), List().add(1, 7), List().add(3, 7))
-.var parkLots = List().add(List().add(1, 2), List().add(3, 6))
-.var garageLots = List().add(List().add(3, 2), List().add(2, 4), List().add(1, 6))
-// card shops (robbed like banks: targets 8-15, smaller loot)
-.var cardLots = List().add(List().add(2, 1), List().add(1, 3), List().add(3, 5), List().add(2, 7),
-                           List().add(2, 2), List().add(3, 3), List().add(1, 5), List().add(2, 5))
-.const FRIEND_LOT_X = 0          // the friend's house: lot (0, 7), in the suburb
-.const FRIEND_LOT_Y = 7
-.var friendX = 0                 // the middle of his driveway, world pixels
-.var friendY = 0
-.var garageX = List()            // middle of the spray booth, world pixels
-.var garageY = List()
-.function isLot(list, kx, ky) {
-    .for (var i = 0; i < list.size(); i++) .if (list.get(i).get(0) == kx && list.get(i).get(1) == ky) .return i
-    .return -1
-}
-.var bankDoorX = List()          // door centre, world pixels
-.var bankDoorY = List()          // a spot on the sidewalk just below the door
-.for (var i = 0; i < bankLots.size() + cardLots.size(); i++) {
-    .eval bankDoorX.add(0)
-    .eval bankDoorY.add(0)
-}
-
-.for (var ky = 0; ky < LY0.size(); ky++) {
-    .for (var kx = 0; kx < LX0.size(); kx++) {
-        .var x0 = LX0.get(kx)
-        .var x1 = LX1.get(kx)
-        .var y0 = LY0.get(ky)
-        .var y1 = LY1.get(ky)
-        .eval mfill(x0, y0, x1 - x0 + 1, y1 - y0 + 1, WALK)
-        .for (var n = 0; n < 3; n++) .eval mset(x0 + rnd(x1 - x0 + 1), y0 + rnd(y1 - y0 + 1), WALK2)
-        .var bx0 = x0 + ((x0 > 2) ? 2 : 0)
-        .var bx1 = x1 - ((x1 < 125) ? 2 : 0)
-        .var by0 = y0 + ((y0 > 2) ? 2 : 0)
-        .var by1 = y1 - ((y1 < 125) ? 2 : 0)
-        .var bw = bx1 - bx0 + 1
-        .var bh = by1 - by0 + 1
-        .if (by1 < 125) .eval mset(bx0 + 1 + rnd(bw - 2), by1 + 2, HYDRANT)
-        .var b = isLot(bankLots, kx, ky)
-        .var p = isLot(parkLots, kx, ky)
-        .var g = isLot(garageLots, kx, ky)
-        .var cs = isLot(cardLots, kx, ky)
-        .if (kx == FRIEND_LOT_X && ky == FRIEND_LOT_Y) {
-            // the friend's house: yellow roof, a driveway down to the street
-            .eval mfill(bx0, by0, bw, bh + 2, WALK)
-            .eval mstamp(bx0 + 1, by0, friendHouse)
-            .for (var y = by0 + 4; y <= by1 + 2; y++) {
-                .eval mset(bx0 + 2, y, DRIVE_L)
-                .eval mset(bx0 + 3, y, DRIVE)
-                .eval mset(bx0 + 4, y, DRIVE_R)
-            }
-            .eval mstamp(bx0 + bw - 2, by0 + 4, TREE)
-            .eval friendX = (bx0 + 3) * 8 + 4
-            .eval friendY = (by1 + 1) * 8
-        } else {
-        .if (b >= 0) {
-            .var bankx = bx0 + floor((bw - 10) / 2)
-            .eval buildings(bx0, by0, bankx - bx0, bh)
-            .eval nine(bankx, by0, 10, bh, roofBank)
-            .eval buildings(bankx + 10, by0, bx1 - bankx - 9, bh)
-            .eval mstamp(bankx + 3, by0 + 1, BANKWORD)
-            .eval mstamp(bankx + 4, by0 + 3, bankSign)
-            .eval mstamp(bankx + 4, by0 + bh - 1, bankDoor)
-            .eval bankDoorX.set(b, (bankx + 5) * 8)
-            .eval bankDoorY.set(b, (by0 + bh) * 8 + 6)
-        } else {
-        .if (cs >= 0) {
-            .var sx = bx0 + floor((bw - 10) / 2)
-            .eval buildings(bx0, by0, sx - bx0, bh)
-            .eval nine(sx, by0, 10, bh, roofShop)
-            .eval buildings(sx + 10, by0, bx1 - sx - 9, bh)
-            .eval mstamp(sx + 2, by0 + 1, CARDWORD)
-            .eval mstamp(sx + 4, by0 + 3, cardSign)
-            .eval mstamp(sx + 4, by0 + bh - 1, bankDoor)
-            .eval bankDoorX.set(bankLots.size() + cs, (sx + 5) * 8)
-            .eval bankDoorY.set(bankLots.size() + cs, (by0 + bh) * 8 + 6)
-        } else {
-        .if (g >= 0) {
-            // a paint garage, the spray booth open to the street below
-            .var gx = bx0 + floor((bw - 10) / 2)
-            .eval buildings(bx0, by0, gx - bx0, bh)
-            .eval nine(gx, by0, 10, bh, roofC)
-            .eval buildings(gx + 10, by0, bx1 - gx - 9, bh)
-            .eval mstamp(gx + 2, by0 + 1, PAINTWORD)
-            .eval mstamp(gx + 3, by0 + bh - 3, paintBay)
-            .eval garageX.add((gx + 5) * 8)
-            .eval garageY.add((by0 + bh - 1) * 8)
-        } else {
-        .if (p >= 0) {
-            .eval mfill(bx0, by0, bw, bh, ROADCH)
-            .for (var x = bx0; x < bx0 + bw - 2; x = x + 3) {
-                .eval mfill(x, by0, 1, 3, STALL)
-                .if (bh >= 8) .eval mfill(x, by0 + bh - 3, 1, 3, STALL)
-                // half the top stalls and a quarter of the bottom ones taken:
-                // room to drive in (same random calls, the city stays the same)
-                .if (rnd(4) >= 2) .eval mstamp(x + 1, by0, parked(x, by0))
-                .if (rnd(4) == 0 && bh >= 8) .eval mstamp(x + 1, by0 + bh - 3, parked(x, by0 + bh))   // (lots shorter than 8 rows: one row of stalls)
-            }
-        } else {
-            .eval buildings(bx0, by0, bw, bh)
-        }
-        }
-        }
-        }
-        }
-    }
-}
-
-// parked cars along the avenue curbs, manholes on the roads
-.for (var k = 0; k < AVX.size(); k++) {
-    .var ax = AVX.get(k)
-    .for (var j = 0; j < STY.size() - 1; j++) {
-        .var ys = STY.get(j) + SH + 2
-        // at most one per block, on one side: never one on each side
-        .var side = rnd(5)
-        .if (side < 2) .eval mstamp(ax, ys + 1 + rnd(3), parked(ax, ys))
-        .if (side == 2 || side == 3) .eval mstamp(ax + 4, ys + 1 + rnd(3), parked(ax + 4, ys + 4))
-    }
-}
-.for (var n = 0; n < 24; n++) {
-    .var x = AVX.get(rnd(4)) + 1 + rnd(3)
-    .var y = 2 + rnd(120)
-    .if (mget(x, y) == ROADCH && mget(x + 1, y) == ROADCH) .eval mstamp(x, y, MANHOLE)
-}
-
-// the suburb rows: city characters there lose their "w" pixels (green
-// there): road markings and the card shop's white turn yellow, the rest grey
+// the suburb: city characters lose their "w" pixels (green there): road
+// markings and the card shop's white turn yellow, the rest grey
 .var subKeep = Hashtable()
 .eval subKeep.put("" + WALK, true)
 .eval subKeep.put("" + WALK2, true)
@@ -536,8 +376,217 @@
     .eval subMap.put(key, n)
     .return n
 }
-.for (var y = SUB_ROW; y < MH; y++) .for (var x = 0; x < MW; x++) .eval mset(x, y, subVariant(mget(x, y)))
 
+// the lot inside a block: buildings from column 2, row 2, 22 x 7
+.const LBX = 2
+.const LBY = 2
+.const LBW = 22
+.const LBH = 7
+.const DOOR_DX = (LBX + floor((LBW - 10) / 2) + 5) * 8      // a door in the middle
+.const DOOR_DY = (LBY + LBH) * 8 + 6                        // (on the sidewalk below it)
+.const GARAGE_DY = (LBY + LBH - 1) * 8
+.const FRIEND_DX = (LBX + 3) * 8 + 4                        // his driveway
+.const FRIEND_DY = (LBY + LBH + 1) * 8
+
+// one block design: kind = "office", "bank", "card", "garage", "parking",
+// "houses", "friend", "park"; car = a car parked on the avenue (0 none,
+// 1 left lane, 2 right lane); sub = in the suburb
+.var blocks = List()
+.var carSpot = Hashtable()       // design -> a car parked on its avenue (for testing)
+.function block(kind, car, sub) {
+    .eval inSub = sub
+    .for (var i = 0; i < BW * BH; i++) .eval cityMap.set(i, WALK)
+    .for (var n = 0; n < 3; n++) .eval mset(rnd(26), rnd(11), WALK2)
+    // roads: the avenue, the street, markings, crosswalks
+    .eval mfill(26, 0, 6, 16, ROADCH)
+    .eval mfill(0, 11, 32, 5, ROADCH)
+    .for (var y = 1; y <= 9; y++) {
+        .eval mset(28, y, AVL)
+        .eval mset(29, y, AVR)
+    }
+    .eval mfill(26, 0, 6, 1, ZEB_V)
+    .eval mfill(26, 10, 6, 1, ZEB_V)
+    .for (var x = 1; x <= 24; x++) .if (mod(floor((x + 19) / 2), 2) == 0) .eval mset(x, 13, STDASH)
+    .eval mfill(0, 11, 1, 5, ZEB_H)
+    .eval mfill(25, 11, 1, 5, ZEB_H)
+    .eval mset(LBX + 1 + rnd(LBW - 2), LBY + LBH + 1, HYDRANT)
+    .var mx = 27 + rnd(3)
+    .var my = 1 + rnd(8)
+    .if (rnd(3) == 0) .eval mstamp(mx, my, MANHOLE)
+    // the lot
+    .var cx = LBX + floor((LBW - 10) / 2)
+    .if (kind == "office" || kind == "houses") .eval buildings(LBX, LBY, LBW, LBH)
+    .if (kind == "bank") {
+        .eval buildings(LBX, LBY, cx - LBX, LBH)
+        .eval nine(cx, LBY, 10, LBH, roofBank)
+        .eval buildings(cx + 10, LBY, LBX + LBW - cx - 10, LBH)
+        .eval mstamp(cx + 3, LBY + 1, BANKWORD)
+        .eval mstamp(cx + 4, LBY + 3, bankSign)
+        .eval mstamp(cx + 4, LBY + LBH - 1, bankDoor)
+    }
+    .if (kind == "card") {
+        .eval buildings(LBX, LBY, cx - LBX, LBH)
+        .eval nine(cx, LBY, 10, LBH, roofShop)
+        .eval buildings(cx + 10, LBY, LBX + LBW - cx - 10, LBH)
+        .eval mstamp(cx + 2, LBY + 1, CARDWORD)
+        .eval mstamp(cx + 4, LBY + 3, cardSign)
+        .eval mstamp(cx + 4, LBY + LBH - 1, bankDoor)
+    }
+    .if (kind == "garage") {
+        .eval buildings(LBX, LBY, cx - LBX, LBH)
+        .eval nine(cx, LBY, 10, LBH, roofC)
+        .eval buildings(cx + 10, LBY, LBX + LBW - cx - 10, LBH)
+        .eval mstamp(cx + 2, LBY + 1, PAINTWORD)
+        .eval mstamp(cx + 3, LBY + LBH - 3, paintBay)
+    }
+    .if (kind == "parking") {
+        .eval mfill(LBX, LBY, LBW, LBH, ROADCH)
+        .for (var x = LBX; x < LBX + LBW - 2; x = x + 3) {
+            .eval mfill(x, LBY, 1, 3, STALL)
+            .if (rnd(4) >= 2) .eval mstamp(x + 1, LBY, parked(x, LBY))
+        }
+    }
+    .if (kind == "friend") {
+        .eval mstamp(LBX + 1, LBY, friendHouse)
+        .for (var y = LBY + 4; y <= LBY + LBH + 1; y++) {
+            .eval mset(LBX + 2, y, DRIVE_L)
+            .eval mset(LBX + 3, y, DRIVE)
+            .eval mset(LBX + 4, y, DRIVE_R)
+        }
+        .eval mstamp(LBX + 8, LBY + 4, TREE)
+        .eval houses(LBX + 11, LBY, LBW - 11, LBH)
+    }
+    .if (kind == "park") {
+        .for (var n = 0; n < 7; n++) .eval mstamp(LBX + rnd(LBW - 2), LBY + rnd(LBH - 1), TREE)
+        .eval mfill(LBX, LBY + LBH, LBW, 1, HEDGE)
+    }
+    .var cy = 2 + rnd(4)
+    .if (car == 1) {
+        .eval mstamp(26, cy, parked(26, 2))
+        .eval carSpot.put("" + blocks.size(), List().add(26, cy))
+    }
+    .if (car == 2) .eval mstamp(30, 2 + rnd(4), parked(30, 6))
+    .if (sub) .for (var i = 0; i < BW * BH; i++) .eval cityMap.set(i, subVariant(cityMap.get(i)))
+    .var b = List()
+    .for (var i = 0; i < BW * BH; i++) .eval b.add(cityMap.get(i))
+    .eval blocks.add(b)
+    .return blocks.size() - 1
+}
+// the designs
+.var dOffice = List()
+.eval dOffice.add(block("office", 0, false))
+.eval dOffice.add(block("office", 1, false))
+.eval dOffice.add(block("office", 0, false))
+.eval dOffice.add(block("office", 2, false))
+.eval dOffice.add(block("office", 0, false))
+.eval dOffice.add(block("office", 1, false))
+.eval dOffice.add(block("office", 2, false))
+.var dBank = List()
+.eval dBank.add(block("bank", 0, false))
+.eval dBank.add(block("bank", 2, false))
+.var dCard = List()
+.eval dCard.add(block("card", 1, false))
+.eval dCard.add(block("card", 0, false))
+.var dGarage = block("garage", 0, false)
+.var dParking = List()
+.eval dParking.add(block("parking", 0, false))
+.eval dParking.add(block("parking", 1, false))
+.var dHouses = List()
+.eval dHouses.add(block("houses", 0, true))
+.eval dHouses.add(block("houses", 1, true))
+.eval dHouses.add(block("houses", 2, true))
+.var dSubPark = block("park", 0, true)
+.var dFriend = block("friend", 0, true)
+.var dSubBank = block("bank", 0, true)
+.var dSubCard = block("card", 2, true)
+.const NBLOCKS = blocks.size()
+.const NPRIV = 4                // spare blocks: private copies of blocks a car was stolen from
+.errorif NBLOCKS + NPRIV > 31, "too many block designs: " + NBLOCKS
+
+// the grid: what stands where. Targets, garages and the friend's house
+// only in whole blocks (not at the edge of the world).
+.const SUB_J = 13               // block rows 13-16: the suburb
+.var grid = List()
+.for (var i = 0; i < GW * GH; i++) .eval grid.add(-1)
+.function gset(i, j, d) {
+    .eval grid.set(j * GW + i, d)
+    .return 0
+}
+.function gget(i, j) { .return grid.get(j * GW + i) }
+.var bankDoorX = List()          // door centre, world pixels (banks 0-15, card shops 16-31)
+.var bankDoorY = List()          // a spot on the sidewalk just below the door
+.var garageX = List()            // middle of the spray booth, world pixels
+.var garageY = List()
+.function blockPX(i) { .return (i * BW + BLK_X0) * 8 }
+.function blockPY(j) { .return (j * BH + BLK_Y0) * 8 }
+// free inner blocks (city and suburb), shuffled
+.function shuffled(l) {
+    .for (var n = l.size() - 1; n > 0; n--) {
+        .var k = rnd(n + 1)
+        .var t = l.get(n)
+        .eval l.set(n, l.get(k))
+        .eval l.set(k, t)
+    }
+    .return l
+}
+.var cityFree = List()
+.for (var j = 1; j < SUB_J; j++) .for (var i = 1; i < GW - 1; i++) .eval cityFree.add(i + j * GW)
+.eval shuffled(cityFree)
+.var subFree = List()
+.for (var j = SUB_J; j < GH - 1; j++) .for (var i = 1; i < GW - 1; i++) .if (!(i == 1 && j == 15)) .eval subFree.add(i + j * GW)
+.eval shuffled(subFree)
+.var cp = 0
+.var sp = 0
+// 13 banks and 13 card shops in the city, 3 of each in the suburb
+.for (var t = 0; t < 32; t++) {
+    .var inS = mod(t, 16) >= 13
+    .var g = 0
+    .if (inS) {
+        .eval g = subFree.get(sp)
+        .eval sp = sp + 1
+    } else {
+        .eval g = cityFree.get(cp)
+        .eval cp = cp + 1
+    }
+    .var d = 0
+    .if (t < 16) {
+        .eval d = inS ? dSubBank : dBank.get(rnd(2))
+    } else {
+        .eval d = inS ? dSubCard : dCard.get(rnd(2))
+    }
+    .eval grid.set(g, d)
+    .eval bankDoorX.add(blockPX(mod(g, GW)) + DOOR_DX)
+    .eval bankDoorY.add(blockPY(floor(g / GW)) + DOOR_DY)
+}
+.for (var n = 0; n < 6; n++) {
+    .var g = cityFree.get(cp)
+    .eval cp = cp + 1
+    .eval grid.set(g, dGarage)
+    .eval garageX.add(blockPX(mod(g, GW)) + DOOR_DX)
+    .eval garageY.add(blockPY(floor(g / GW)) + GARAGE_DY)
+}
+.for (var n = 0; n < 8; n++) {
+    .eval grid.set(cityFree.get(cp), dParking.get(rnd(2)))
+    .eval cp = cp + 1
+}
+// the friend's house: block (1, 15), in the suburb
+.eval gset(1, 15, dFriend)
+.var friendX = blockPX(1) + FRIEND_DX
+.var friendY = blockPY(15) + FRIEND_DY
+// the rest: offices in the city, houses (now and then a park) in the suburb
+.for (var j = 0; j < GH; j++) {
+    .for (var i = 0; i < GW; i++) {
+        .if (gget(i, j) < 0) {
+            .if (j >= SUB_J) {
+                .eval gset(i, j, (rnd(5) == 0) ? dSubPark : dHouses.get(rnd(3)))
+            } else {
+                .eval gset(i, j, dOffice.get(rnd(dOffice.size())))
+            }
+        }
+    }
+}
+
+.var WALL_SUB = subVariant(WALLCH)
 .var CITY_CHARS = chars.size()
 
 // ---------------------------------------------------------------- comic bubbles
@@ -659,4 +708,13 @@
 .for (var i = 0; i < garageX.size(); i++) {
     .eval goalX.add(garageX.get(i))
     .eval goalY.add(garageY.get(i))
+}
+
+// for testing: where the first car parked on an avenue is (world pixels)
+.for (var g = 0; g < GW * GH; g++) {
+    .if (carSpot.containsKey("" + grid.get(g)) && mod(g, GW) > 0 && floor(g / GW) > 0) {
+        .var sp = carSpot.get("" + grid.get(g))
+        .print "A parked car: x " + toHexString(blockPX(mod(g, GW)) + sp.get(0) * 8) + ", y " + toHexString(blockPY(floor(g / GW)) + sp.get(1) * 8)
+        .eval g = GW * GH
+    }
 }

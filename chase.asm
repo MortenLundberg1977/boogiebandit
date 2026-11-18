@@ -392,7 +392,7 @@ npc_choose:
     and #%1110
     sta vmask
 !:  lda n_yh,x                      // bottom street: not south
-    cmp #3
+    cmp #7
     bne !+
     lda n_yl,x
     cmp #$c4
@@ -406,7 +406,7 @@ npc_choose:
     and #%0111
     sta vmask
 !:  lda n_xh,x                      // last avenue: not east
-    cmp #3
+    cmp #7
     bne !+
     lda vmask
     and #%1101
@@ -939,10 +939,10 @@ bullet_frame:
     tya
     adc bul_yh
     sta bul_yh
-    cmp #4                          // off the map
+    cmp #8                          // off the map
     bcs bf_kill
     lda bul_xh
-    cmp #4
+    cmp #8
     bcs bf_kill
     // the map character under it: a building stops it
     lda bul_yl
@@ -955,10 +955,6 @@ bullet_frame:
     lsr
     ror t0
     ldx t0
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
     lda bul_xl
     sta t0
     lda bul_xh
@@ -968,7 +964,8 @@ bullet_frame:
     ror t0
     lsr
     ror t0
-    ldy t0
+    lda t0
+    jsr map_at
     lda (zp0),y
     tax
     lda class_tab,x
@@ -1059,7 +1056,7 @@ block_try:
     lda tgt_xh
     clc
     adc #2
-    cmp #4
+    cmp #8
     bcs bt_no
     bcc bt_hset
 !:  lda tgt_xh
@@ -1088,7 +1085,7 @@ bt_vert:
     bmi !+
     clc
     adc #2
-    cmp #7
+    cmp #15
     bcs bt_no
     bcc bt_vset
 !:  sec
@@ -1165,7 +1162,19 @@ nb_gone:
 paint_check:
     lda state
     cmp #ST_DRIVE
-    bne pc_rts
+    beq !+
+pc_rts0:
+    rts
+!:
+    jsr abs_speed                   // driving on: no need to look (unless
+    lda t1                          // the lock is still on)
+    bne !+
+    lda t0
+    cmp #$40
+    bcc pc_look
+!:  lda paint_lock
+    beq pc_rts0
+pc_look:
     lda car_yl                      // the map character under the car, 6
     sec                             // pixels above its middle (the booths
     sbc #6                          // open to the south: nose in is enough)
@@ -1179,10 +1188,6 @@ paint_check:
     lsr
     ror t0
     ldx t0
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
     lda car_xl
     sta t0
     lda car_xh
@@ -1192,7 +1197,8 @@ paint_check:
     ror t0
     lsr
     ror t0
-    ldy t0
+    lda t0
+    jsr map_at
     lda (zp0),y
     tax
     lda class_tab,x
@@ -1389,14 +1395,14 @@ spawn_cab:
     tay
     lda cab_ox,y
     sta t4
-    lda #3
+    lda #7
     sta t5
     lda tgt_xh
     jsr node_off
     sta t0
     lda cab_oy,y
     sta t4
-    lda #7
+    lda #15
     sta t5
     jsr player_ny
     jsr node_off
@@ -1440,14 +1446,14 @@ sc_loop:
     bcs sc_done
     lda cop_ox,x
     sta t4
-    lda #3
+    lda #7
     sta t5
     lda tgt_xh
     jsr node_off
     sta t0
     lda cop_oy,x
     sta t4
-    lda #7
+    lda #15
     sta t5
     jsr player_ny
     jsr node_off
@@ -1715,6 +1721,15 @@ safe_check:
     lda state
     cmp #ST_DRIVE
     bne sf_out
+    jsr abs_speed                   // driving on: no need to look (unless
+    lda t1                          // it was in the driveway)
+    bne !+
+    lda t0
+    cmp #$20
+    bcc sf_look
+!:  lda safe_in
+    beq sf_rts
+sf_look:
     lda car_yl                      // the map character under the car
     sta t0
     lda car_yh
@@ -1725,10 +1740,6 @@ safe_check:
     lsr
     ror t0
     ldx t0
-    lda mrow_lo,x
-    sta zp0
-    lda mrow_hi,x
-    sta zp0 + 1
     lda car_xl
     sta t0
     lda car_xh
@@ -1738,7 +1749,8 @@ safe_check:
     ror t0
     lsr
     ror t0
-    ldy t0
+    lda t0
+    jsr map_at
     lda (zp0),y
     tax
     lda class_tab,x
@@ -2137,7 +2149,7 @@ guard_out:
     sec
     sbc #3
     and #NBANKS - 1
-    cmp #8
+    cmp #16
     bcc !+
     lda n_spd,x                     // a card shop owner purple, slower
     sec
