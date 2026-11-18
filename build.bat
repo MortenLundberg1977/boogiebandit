@@ -1,6 +1,6 @@
 @echo off
 setlocal
-REM Usage: build.bat [pull [branch]] [run^|send^|nosend]
+REM Usage: build.bat [pull [branch]] [run^|send^|nosend^|reu^|sendreu]
 REM   pull          get the latest version of the current branch from GitHub first
 REM   pull branch   switch to that branch and get its latest version
 REM   run           start the game in VICE after building
@@ -9,6 +9,11 @@ REM                 it and started on the real C64 (the C64 must show the Kung F
 REM                 Flash menu); nothing happens if none is found
 REM   send          the same, but a missing cartridge or a failed send is an error
 REM   nosend        do not send (builds for testing in VICE)
+REM   reu, sendreu  like the default / send, but send the REU edition
+REM                 (build\boogie-reu.prg: the newspaper and other extras when the
+REM                 Kung Fu Flash has its REU on; without an REU it plays as the standard one)
+REM Both editions are built every time and both are on the disk image:
+REM LOAD"BOOGIE",8 (standard) and LOAD"BOOGIE REU",8.
 REM Examples: build.bat run / build.bat pull run / build.bat pull / build.bat nosend
 REM For sending: EF3USB_EXE = path of ef3usb.exe (default ..\tools\ef3utils\ef3usb.exe),
 REM           KFF_PORT = the cartridge's COM port, e.g. COM3 (found automatically if not set).
@@ -25,7 +30,7 @@ if errorlevel 1 (
 git fetch origin
 if errorlevel 1 exit /b 1
 set "PULL_BRANCH="
-if not "%~1"=="" if /I not "%~1"=="run" if /I not "%~1"=="send" if /I not "%~1"=="nosend" set "PULL_BRANCH=%~1"
+if not "%~1"=="" if /I not "%~1"=="run" if /I not "%~1"=="send" if /I not "%~1"=="nosend" if /I not "%~1"=="reu" if /I not "%~1"=="sendreu" set "PULL_BRANCH=%~1"
 if defined PULL_BRANCH shift
 REM git may replace this file, so update and restart the script on one line.
 if defined PULL_BRANCH (git checkout "%PULL_BRANCH%" && git pull --ff-only && "%SELF%" %1) else (git pull --ff-only && "%SELF%" %1)
@@ -52,6 +57,12 @@ if not "%KA_ERROR%"=="0" exit /b 1
 REM KickAssembler reports failed .assert checks but still succeeds.
 findstr /c:"FAILED" build\kickass.log >nul && (echo A check failed, see above. & exit /b 1)
 
+REM The REU edition: the same source with REU defined.
+"%JAVA_EXE%" -jar "%KICKASS_JAR%" boogie.asm -odir build -define REU -o build\boogie-reu.prg > build\kickass-reu.log 2>&1
+if errorlevel 1 (type build\kickass-reu.log & echo The REU edition did not build. & exit /b 1)
+findstr /c:"FAILED" build\kickass-reu.log >nul && (type build\kickass-reu.log & echo A check failed in the REU edition. & exit /b 1)
+findstr /c:"REU extras:" build\kickass-reu.log
+
 if not defined C1541_EXE set "C1541_EXE=c1541"
 where "%C1541_EXE%" >nul 2>nul
 if errorlevel 1 (
@@ -61,7 +72,7 @@ if errorlevel 1 (
 REM Disk filenames must be lowercase: c1541 stores uppercase ASCII as shifted
 REM PETSCII, which a LOAD"..." typed on the C64 never matches.
 if exist build\boogiebandit.d64 del build\boogiebandit.d64
-"%C1541_EXE%" -format "boogie bandit,77" d64 build\boogiebandit.d64 -write build\boogie.prg boogie >nul
+"%C1541_EXE%" -format "boogie bandit,77" d64 build\boogiebandit.d64 -write build\boogie.prg boogie -write build\boogie-reu.prg "boogie reu" >nul
 if errorlevel 1 exit /b 1
 :disk_done
 
@@ -72,13 +83,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Built build\boogie.prg, build\boogiebandit.d64 and build\boogiebandit.t64
+echo Built build\boogie.prg, build\boogie-reu.prg, build\boogiebandit.d64 (both) and build\boogiebandit.t64
 
 REM Send it to the Kung Fu Flash too when one is plugged in (always tried,
 REM unless nosend; with send a missing cartridge or a failed send is an error).
 set "SEND_MODE=auto"
 if /I "%~1"=="send" set "SEND_MODE=must"
 if /I "%~1"=="nosend" set "SEND_MODE=off"
+set "SEND_PRG=build\boogie.prg"
+if /I "%~1"=="reu" set "SEND_PRG=build\boogie-reu.prg"
+if /I "%~1"=="sendreu" (set "SEND_PRG=build\boogie-reu.prg" & set "SEND_MODE=must")
 if "%SEND_MODE%"=="off" goto send_done
 if not defined EF3USB_EXE set "EF3USB_EXE=..\tools\ef3utils\ef3usb.exe"
 if not exist "%EF3USB_EXE%" (
@@ -94,8 +108,8 @@ if not defined KFF_PORT (
 REM The cartridge only takes a program while its menu is on screen (a running
 REM game is not stopped): give up after KFF_WAIT seconds (default 20).
 if not defined KFF_WAIT set "KFF_WAIT=20"
-echo Sending build\boogie.prg to Kung Fu Flash on %KFF_PORT% (waiting up to %KFF_WAIT% s for its menu)
-powershell -NoProfile -Command "$p = Start-Process -FilePath $env:EF3USB_EXE -ArgumentList $env:KFF_PORT,'s','build\boogie.prg' -NoNewWindow -PassThru; $null = $p.Handle; if (-not $p.WaitForExit([int]$env:KFF_WAIT * 1000)) { $p.Kill(); exit 2 }; exit $p.ExitCode"
+echo Sending %SEND_PRG% to Kung Fu Flash on %KFF_PORT% (waiting up to %KFF_WAIT% s for its menu)
+powershell -NoProfile -Command "$p = Start-Process -FilePath $env:EF3USB_EXE -ArgumentList $env:KFF_PORT,'s',$env:SEND_PRG -NoNewWindow -PassThru; $null = $p.Handle; if (-not $p.WaitForExit([int]$env:KFF_WAIT * 1000)) { $p.Kill(); exit 2 }; exit $p.ExitCode"
 if errorlevel 1 (
     echo Not sent. Press the Kung Fu Flash button so the C64 shows its menu, then build again.
     goto send_fail

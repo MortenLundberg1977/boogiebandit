@@ -30,6 +30,14 @@
 .const SCR_B = $c400
 .const SPRLO = $c800
 .const CHARSET = $d000
+#if REU
+.const NEWS_OV = $c400              // the REU edition: the newspaper code runs in screen B
+.const R_NEWS_OV = 0                // REU addresses: its code, the page
+.const R_BITMAP = $0400
+.const R_SCREEN = R_BITMAP + 8000
+.const R_COLOUR = R_SCREEN + 1024
+.const EXTRA_LEN = R_COLOUR + 1024
+#endif
 .const SPRHI = $d800
 .const BITMAP = $e000
 .const COPSPR = $f800            // police car sprites 224-239 (after the B->A shift)
@@ -480,6 +488,9 @@ start:
     txs
     lda #$35
     sta $01
+#if REU
+    jsr reu_init                    // (the REU edition: the extras into the REU)
+#endif
     lda #$7f
     sta $dc0d
     sta $dd0d
@@ -4858,3 +4869,120 @@ init_end:
 .print "Program ends at $" + toHexString(program_end) + ", start-up data at $" + toHexString(init_end)
 .errorif program_end > BLOCKS, "program overlaps the city blocks at $8000"
 .errorif init_end > $a000, "start-up data must end below $a000 (BASIC LOAD limit)"
+
+// =====================================================================
+// the REU edition (build with -define REU: build\boogie-reu.prg)
+// =====================================================================
+// The same game; the extras (the newspaper when Vinnie is busted) travel in
+// the program file from $a000 (a LOAD may fill RAM up to $cfff) and are
+// copied into the REU first thing at start (reu_init), before the city is
+// unpacked over them. Without an REU the game runs as the standard one
+// (reu_news is turned into an rts).
+#if REU
+#import "gfx_news.asm"
+.errorif init_end > $a000, "start-up data must end below $a000 in the REU edition too"
+* = $a000 "REU extras"
+extras:
+news_ov_src:
+.pseudopc NEWS_OV {
+news_ov:
+    lda #0
+    sta in_game
+    sta $d015
+    jsr sound_off
+    lda #$0b
+    sta $d011
+    ldy #3 * 7 - 1                  // bitmap, screen, colour RAM from the REU
+nv_blk:
+    ldx #6
+!:  lda nv_dma,y
+    sta $df02,x
+    dey
+    dex
+    bpl !-
+    lda #$91
+    sta $df01
+    tya
+    bpl nv_blk
+    jsr bm_show
+    lda #1                          // white paper, a grey edge
+    sta $d021
+    lda #11
+    sta $d020
+    lda #200                        // 4 seconds, or fire
+    sta nv_t
+!:  jsr wait_frame
+    jsr read_input
+    lda joy_new
+    and #$10
+    bne !+
+    dec nv_t
+    bne !-
+!:  lda #0
+    sta $d020
+    jmp sm_exit                     // back to the streets (as from the city map)
+nv_t:   .byte 0
+nv_dma: .word $d800, R_COLOUR       // (the last block is taken first)
+        .byte 0
+        .word 1000
+        .word SCR_A, R_SCREEN
+        .byte 0
+        .word 1000
+        .word $e000, R_BITMAP
+        .byte 0
+        .word 8000
+news_ov_end:
+}
+.errorif news_ov_end - news_ov > R_BITMAP, "the newspaper code is too long"
+* = extras + R_BITMAP "REU extras: the newspaper"
+.fill 8000, newsBitmap.get(i)
+.fill 1024, newsScreen.get(i)
+.fill 1024, newsColour.get(i)
+// run once at start (before anything is unpacked over this): is there an
+// REU? then the extras go into it
+reu_init:
+    lda #$a5                        // a byte there and back
+    sta reu_tb
+    lda #0
+    sta $df0a
+    ldx #6
+!:  lda ri_test,x
+    sta $df02,x
+    dex
+    bpl !-
+    lda #$90                        // stash
+    sta $df01
+    lda #$5a
+    sta reu_tb
+    ldx #6
+!:  lda ri_test,x
+    sta $df02,x
+    dex
+    bpl !-
+    lda #$91                        // fetch
+    sta $df01
+    lda reu_tb
+    cmp #$a5
+    bne ri_none
+    ldx #6
+!:  lda ri_all,x
+    sta $df02,x
+    dex
+    bpl !-
+    lda #$90
+    sta $df01
+    rts
+ri_none:
+    lda #$60                        // no REU: no newspaper
+    sta reu_news
+    rts
+reu_tb:     .byte 0
+ri_test:    .word reu_tb, $fff0
+            .byte 0
+            .word 1
+ri_all:     .word extras, 0
+            .byte 0
+            .word EXTRA_LEN
+.errorif * > $d000, "the REU extras must end below $d000: " + toHexString(*)
+.print "REU extras: $a000-$" + toHexString(*)
+#endif

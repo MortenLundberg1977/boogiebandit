@@ -14,6 +14,13 @@ get a new paint job, and bring the loot to your friend's house in the suburb.
 [boogie.prg](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogie.prg),
 the latest version; older ones on the [Releases](https://github.com/MortenLundberg1977/boogiebandit/releases) page.
 
+**REU edition:** [boogie-reu.prg](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogie-reu.prg),
+also on the disk image (`LOAD"BOOGIE REU",8`). The same game, plus extras
+for machines with a RAM Expansion Unit (a 1764/1750, or a Kung Fu Flash or
+emulator with its REU switched on): when Vinnie is busted, the front page of
+THE DAILY BOOGIE shows his lineup photo. Without an REU it plays exactly like
+the standard one.
+
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
 ![Officer shooting](screenshots/16_officer_shooting.png) ![Paint garage](screenshots/15_paint_garage.png)

@@ -182,9 +182,41 @@ a fix only PATCH + 1), drawn as "V2.1.0" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>` (tools/release.ps1 does it and publishes the release).
 
+## The REU edition
+
+Every build makes two programs from the same source: `build\boogie.prg`
+(standard) and `build\boogie-reu.prg` (KickAssembler `-define REU`; code
+inside `#if REU`). Game mechanics must stay identical: the REU edition only
+adds presentation. Both are on the disk image (`boogie`, `boogie reu`); the
+release has both .prg files. The REU edition's extras are assembled at $a000
+(after the start-up data; a LOAD may fill RAM up to $cfff, never $d000, the
+I/O area): at start (`start`, before anything is unpacked over them)
+`reu_init` checks for an REU (a byte stashed and fetched back) and stashes
+$a000-`EXTRA_LEN` into REU address 0; with no REU it turns `reu_news` into an
+`rts`, so the program plays as the standard one. Now in the REU:
+- 0: the newspaper code (`news_ov`, assembled for `NEWS_OV` = $c400, screen B,
+  free while a bitmap page is shown), $0400: the newspaper page (bitmap 8000
+  bytes, screen 1024, colour RAM 1024; `gfx_news.asm` paints it at build time:
+  THE DAILY BOOGIE, BUSTED!, a police lineup photo of Vinnie with his hands
+  up next to an officer, columns of grey "text", EXTRA! in red; its own random
+  numbers, so the city stays the same).
+- `bust` calls `reu_news` (chase.asm): fetch the code to $c400 and run it: it
+  fetches the page into $e000/$c000/$d800 (REU DMA; colour RAM is written
+  through the I/O area), shows it on white paper for 4 s or until fire, and
+  goes back to the streets through `sm_exit` (as from the city map). Then
+  BUSTED! as usual.
+- Program space is as tight as in the standard edition (the REU code in the
+  program is a few bytes: put new extras into the REU part, fetched into
+  screen B or the bitmap area when they are used).
+- Test: `tools\vice.ps1 build\boogie-reu.prg "..." -Extra "-reu -reusize 512"`
+  (without `-reu` it must play as the standard edition). A real LOAD of the
+  50 KB file: a d64 with only `boogie reu` and `-Extra "-drive8truedrive -reu
+  -reusize 512"`.
+
 ## Build and test
 
-- `build.bat [pull [branch]] [run|send|nosend]` → `build\boogie.prg`, `build\boogiebandit.d64`
+- `build.bat [pull [branch]] [run|send|nosend|reu|sendreu]` (`reu`/`sendreu`:
+  send the REU edition instead) → `build\boogie.prg`, `build\boogie-reu.prg`, `build\boogiebandit.d64`
   (file `boogie`, lowercase: uppercase becomes shifted PETSCII). One file, loads
   at $0801, `LOAD"BOOGIE",8` + `RUN` on a real C64. Also
   `build\boogiebandit.t64` (tape image, written by `tools\make_t64.ps1`; the

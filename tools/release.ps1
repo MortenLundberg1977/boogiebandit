@@ -17,7 +17,7 @@ $tag = "v$version"
 cmd /c "`"$root\build.bat`" nosend"
 if ($LASTEXITCODE -ne 0) { throw "The build failed" }
 
-$files = @("build\boogiebandit.d64", "build\boogiebandit.t64", "build\boogie.prg")
+$files = @("build\boogiebandit.d64", "build\boogiebandit.t64", "build\boogie.prg", "build\boogie-reu.prg")
 foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f" } }
 
 git rev-parse -q --verify "refs/tags/$tag" | Out-Null
@@ -33,7 +33,8 @@ if ($existing -contains $tag) {
     $notes = "Boogie Bandit $version for the Commodore 64 (PAL).`n`n" +
              "- boogiebandit.d64: disk image (LOAD`"BOOGIE`",8 then RUN; or open it in VICE)`n" +
              "- boogiebandit.t64: tape image`n" +
-             "- boogie.prg: the program on its own (Kung Fu Flash, SD card loaders, emulators)"
+             "- boogie.prg: the program on its own (Kung Fu Flash, SD card loaders, emulators)`n" +
+             "- boogie-reu.prg: the REU edition (needs an REU for its extras, e.g. the newspaper when you are busted; also on the d64 as BOOGIE REU)"
     gh release create $tag @files --title "Boogie Bandit $version" --notes $notes --latest
 }
 if ($LASTEXITCODE -ne 0) { throw "gh failed" }
