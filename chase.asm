@@ -2052,10 +2052,109 @@ sf_time:
     lda #0                          // (not the end of the game)
     sta msg_next
     sta arrow_mode                  // the arrow: the next job again
-    lda #W_SAFE
-    ldx #5
-    jmp show_msg
+jmp greet                       // the friend says hello, then SAFE! LEVEL UP!
 
+
+// ---------------------------------------------------------------- the greeting
+// Vinnie delivered: a white bubble over the friend's house in the greeting
+// font (gfx_city.asm, "the greeting"), then (do_msg) SAFE! LEVEL UP!
+.const GREET_SAVE = $0200           // (MMBUF: only the city map screen uses it)
+greet:
+    jsr clear_bubble
+    lda #W_GREET
+    sta bub_word
+    lda #1                          // white
+    sta bub_col
+    lda #16
+    sta bub_w
+    lda #GREET_X                    // over the house, kept on the screen
+    sec
+    sbc disp_cx
+    bcs !+
+    lda #0
+!:  cmp #25
+    bcc !+
+    lda #24
+!:  sta bub_x
+    lda #GREET_Y
+    sec
+    sbc disp_cy
+    bcc gr_y1
+    beq gr_y1
+    cmp #21
+    bcc !+
+    lda #20
+    bne !+
+gr_y1:
+    lda #1
+!:  sta bub_y
+    jsr chars_greet
+    jsr draw_bubble
+    lda #B_L                        // the two lines of text over its inside
+    sta tbuf
+    lda #B_R
+    sta tbuf + 15
+    ldx #13
+!:  lda greet_t1,x
+    sta tbuf + 1,x
+    dex
+    bpl !-
+    lda #1
+    jsr bubble_row
+    ldx #13
+!:  lda greet_t2,x
+    sta tbuf + 1,x
+    dex
+    bpl !-
+    lda #2
+    jsr bubble_row
+    lda #1
+    sta greet_on
+    jmp msg_state
+// the greeting font into GREET_CH.. (the characters there saved)
+chars_greet:
+    sei
+    lda #$34                        // (the charset is under the I/O area)
+    sta $01
+    ldx #0
+    ldy #0
+cg_loop:
+    lda CHARSET + GREET_CH * 8,x
+    sta GREET_SAVE,x
+    txa
+    and #7
+    cmp #7
+    beq cg_ff
+    cpx #14 * 8                     // (the 15th is blank)
+    bcs cg_ff
+    lda GREET_GLY,y
+    iny
+    bne cg_put
+cg_ff:
+    lda #$ff
+cg_put:
+    sta CHARSET + GREET_CH * 8,x
+    inx
+    cpx #15 * 8
+    bne cg_loop
+    beq cb_done
+// ... and back
+chars_back:
+    sei
+    lda #$34
+    sta $01
+    ldx #15 * 8 - 1
+!:  lda GREET_SAVE,x
+    sta CHARSET + GREET_CH * 8,x
+    dex
+    bpl !-
+cb_done:
+    lda #$35
+    sta $01
+    cli
+    rts
+greet_t1:   .fill 14, greetCode(greetT1.charAt(i))
+greet_t2:   .fill 14, greetCode(greetT2.charAt(i))
 // msg_next = 1 if that was the last life
 last_life:
     ldx #0
@@ -2173,6 +2272,7 @@ show_msg:
     lda #9
     sta bub_y
     jsr draw_bubble
+msg_state:
     lda state
     cmp #ST_MSG
     beq !+
@@ -2185,15 +2285,24 @@ show_msg:
 
 do_msg:
     dec msg_t
-    bne !+
+    bne dm_rts
     jsr clear_bubble
-    lda msg_next
+    lda greet_on                    // after the greeting: SAFE! LEVEL UP!
+    beq !+
+    lda #0
+    sta greet_on
+    jsr chars_back
+    lda #W_SAFE
+    ldx #5
+    jmp show_msg
+!:  lda msg_next
     beq dm_on
     jmp game_over
 dm_on:
     lda msg_prev
     sta state
-!:  rts
+dm_rts:
+    rts
 
 // ---------------------------------------------------------------- sound
 // engine on voice 2 while driving, siren on voice 1 during a chase; the

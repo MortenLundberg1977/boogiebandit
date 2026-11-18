@@ -23,7 +23,7 @@
 .const LAWN_COL = 5             // $d022 in the suburb: grass (green)
 .const GREEN_BASE = 55           // raster line of world y = cam_y (row 0 of the screen at fine y 0)
 .const ROOF_COL = 0             // $d023 roofs, tyre marks (black)
-.const HI_COL = 7               // color RAM: yellow (title, map; the city gets BAND_TAB per block row)
+.const HI_COL = 7               // color RAM: yellow (title, map; the city gets band_tab per block row)
 .const COLRAM = $08 | HI_COL    // multicolor + yellow
 
 .const SCR_A = $c000
@@ -48,14 +48,14 @@
 .const MT_RH = MT_RG + 256
 .const MT_RL = MT_RH + 256
 .const DANCE_SRC = MT_RL + 256      // the 4 dancer sprites (copied to DANCE_SPR for the score page)
-.const BAND_TAB = DANCE_SRC + 256   // the colour of the "y" pixels per block row (0-16; 13-16 the suburb)
-.const GRID_ORIG = BAND_TAB + 32    // the city grid as built (GRID is reset from it every game)
-.const MM_CODE = GRID_ORIG + 160    // the city map screen: what each character shows as (mapCode)
+.const GRID_ORIG = DANCE_SRC + 256    // the city grid as built (GRID is reset from it every game)
+.const MM_CODE = GRID_ORIG + GW * GH    // the city map screen: what each character shows as (mapCode)
 .const WORD_GLYPHS = MM_CODE + 256  // the comic bubble glyphs (wordGlyphs) and their
 .const GL_TL = WORD_GLYPHS + wordGlyphs.size()   // corner characters
 .const GL_TR = GL_TL + glTL.size()
 .const GL_BL = GL_TR + glTR.size()
 .const GL_BR = GL_BL + glBL.size()
+.const GREET_GLY = GL_BR + glBR.size()  // the greeting font: 14 letters, 7 rows each
 .const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -119,6 +119,7 @@
 .const W_SAFE = 19
 .const W_HOT = 20
 .const W_COPS = 21
+.const W_GREET = 22             // a blank bubble the greeting is written into
 .const FRIEND = NBANKS            // door_xl/... index of the friend's driveway
 .const GARAGE0 = NBANKS + 1       // door_xl/... index of the first paint garage
 .const NGARAGE = garageX.size()
@@ -455,6 +456,7 @@
 .label fv = b2alloc(4)              // flight velocity x, y (8.8, signed)
 .label fax = b2alloc(1)             // fractions of the position
 .label fay = b2alloc(1)
+.label greet_on = b2alloc(1)        // the greeting bubble is up (its characters borrowed)
 .label oc_c = b2alloc(1)            // npc_choose / block_try: map cell, direction, slot
 .label oc_r = b2alloc(1)
 .label oc_d = b2alloc(1)
@@ -1327,6 +1329,7 @@ game_start:
     jsr city_colours
 
     lda #0                          // not flying from a crash
+    sta greet_on
     sta fly
     lda #<START_X
     sta car_xl
@@ -1543,16 +1546,15 @@ gen_shift_ba:
     sta zdst + 1
     ldx #3
     jsr copy_pages
-    lda #<guard_spr                 // and the guard after them
+    lda #<guard_rle                 // and the guard after them (packed)
     sta zsrc
-    lda #>guard_spr
+    lda #>guard_rle
     sta zsrc + 1
     lda #<GUARDSPR
     sta zdst
     lda #>GUARDSPR
     sta zdst + 1
-    ldx #2
-    jsr copy_pages
+    jsr unpack
     lda #<shift_ba
     sta zdst
     lda #>shift_ba
@@ -1578,6 +1580,7 @@ gmul:       .fill GH, i * GW
 d018_tab:   .byte D018_A, D018_B
 bit_tab:    .byte 1, 2, 4, 8, 16, 32, 64, 128
 bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
+band_tab:   .fill bandCols.size(), $08 | bandCols.get(i)   // colour RAM per block row
 oc_dr:      .byte 256 - 5, 0, 5, 0  // npc_choose: where to look from a crossing (N E S W)
 oc_dc:      .byte 0, 8, 0, 256 - 8
 // column a, row x: not zero if the character there blocks a car
@@ -1592,13 +1595,14 @@ blk_at:
 wall_row:   .fill 32, WALLCH
 wall_sub:   .fill 32, WALL_SUB
 .errorif floor(wall_row / 256) != floor((wall_sub + 31) / 256), "the wall rows must share a page"
-// the guard sprites (8, copied to GUARDSPR by gen_shift_ba)
-guard_spr:  .fill guardSpr.size(), guardSpr.get(i)
+// the guard sprites (8, unpacked to GUARDSPR by gen_shift_ba)
+.var guardPacked = rlePack(guardSpr)
+guard_rle:  .fill guardPacked.size(), guardPacked.get(i)
 .errorif guardSpr.size() != 512, "the guard is 8 sprites"
 
 // the city palette. The "y" pixels (windows, cabs, signs) take their colour
 // from colour RAM, set per screen row from the block row shown there
-// (BAND_TAB): the IRQ redoes the rows that changed when a new picture with
+// (band_tab): the IRQ redoes the rows that changed when a new picture with
 // another top row is shown (band_rows).
 city_colours:
     lda #0
@@ -1648,7 +1652,7 @@ band_rows:
     ldx #0
 br_band:
     ldy band_w
-    lda BAND_TAB,y
+    lda band_tab,y
 br_loop:
     cmp rowc,x
     beq br_next
@@ -4710,17 +4714,15 @@ hd_common:
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(floor((r - BLK_Y0) / 8), 2))
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(r - BLK_Y0, 8) * 32)
 .for (var i = 0; i < danceSpr.size(); i++) .eval blockBytes.add(danceSpr.get(i))   // the dancers (DANCE_SRC)
-.for (var i = 0; i < bandCols.size(); i++) .eval blockBytes.add($08 | bandCols.get(i))   // BAND_TAB
-.for (var i = bandCols.size(); i < 32; i++) .eval blockBytes.add(0)
 .for (var i = 0; i < GW * GH; i++) .eval blockBytes.add((BLOCKS >> 8) + 2 * grid.get(i))   // GRID_ORIG
-.for (var i = GW * GH; i < 160; i++) .eval blockBytes.add(0)
 .for (var i = 0; i < 256; i++) .eval blockBytes.add(mapCode.get(i))   // MM_CODE
 .for (var i = 0; i < wordGlyphs.size(); i++) .eval blockBytes.add(wordGlyphs.get(i))   // WORD_GLYPHS
 .for (var i = 0; i < glTL.size(); i++) .eval blockBytes.add(glTL.get(i))
 .for (var i = 0; i < glTR.size(); i++) .eval blockBytes.add(glTR.get(i))
 .for (var i = 0; i < glBL.size(); i++) .eval blockBytes.add(glBL.get(i))
 .for (var i = 0; i < glBR.size(); i++) .eval blockBytes.add(glBR.get(i))
-.errorif GL_BR + glBR.size() > $c000, "the city area tables must end below $c000: " + toHexString(GL_BR + glBR.size())
+.for (var i = 0; i < greetGlyphs.size(); i++) .eval blockBytes.add(greetGlyphs.get(i))   // GREET_GLY
+.errorif GREET_GLY + greetGlyphs.size() > $c000, "the city area tables must end below $c000: " + toHexString(GREET_GLY + greetGlyphs.size())
 .var mapPacked = rlePack(blockBytes)
 .const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0

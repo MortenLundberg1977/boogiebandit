@@ -33,7 +33,15 @@ a robbery becomes the getaway car (`hot` = 1); a stolen car is clean (`hot` =
 gfx_city.asm): a yellow roof (yellow on the city map) and a driveway down to
 the street (characters of class `CL_SAFE` = 16). Stop in the driveway with
 loot (`safe_check` in chase.asm, once each time in): during a chase "LOSE THE
-COPS!", in the getaway car "HOT CAR!", else "SAFE! LEVEL UP!": the loot goes
+COPS!", in the getaway car "HOT CAR!", else first the friend's greeting, then
+"SAFE! LEVEL UP!". The greeting (`greet` in chase.asm) is a white bubble over
+his house, "AYY VINNIE! / HOW YOU DOIN'?", in a small blocky font with a grey
+drop shadow (3 x 6 letters, `gfont` in gfx_city.asm, data `GREET_GLY`): for
+the 2 seconds it is shown its 15 characters borrow city characters
+`GREET_CH`.. that never appear in the suburb (found by the city builder;
+`chars_greet` saves them in $0200, `chars_back` puts them back, both with
+I/O banked out). The bubble is a blank word (`W_GREET`) with the two lines
+written over its inside. Then the loot goes
 to the score plus $1,000 x `level`, `level` + 1, the wanted stars go, the
 police start gentle again (`jobs` = (level - 1) / 2, at most 6) and the job
 timer is 2 s shorter a level (at least `JOB_MIN`). Several robberies per trip
@@ -91,7 +99,7 @@ both ways are blocked he follows the wall for up to `FOOT_WALL` steps
 than `FOOT_REACH` (10): BUSTED!. He gives up after 16 s (`n_cur` counts down
 every 4 frames) or 256 pixels away, and goes with the police on BUSTED!. His
 8 sprites (`guardSpr` in gfx_sprites.asm, cap, badge, arms out) live in the
-program (`guard_spr`) and are copied to `$fb00` (sprites 236-243, `SP_GUARD`)
+program packed (`guard_rle`) and are unpacked to `$fb00` (sprites 236-243, `SP_GUARD`)
 by `gen_shift_ba`.
 
 Three lives (hearts in the HUD); then game over, name
@@ -246,13 +254,13 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 180 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 14 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
   (512 bytes each, unpacked at start-up), `PRIV` 4 private copies, `GRID`
   (9 x 17), the `map_at` tables `MT_CB`/`MT_CY`/`MT_RG`/`MT_RH`/`MT_RL`
-  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `BAND_TAB`, `GRID_ORIG`, `MM_CODE` (the city map's character codes) and the comic bubble glyphs (`WORD_GLYPHS`, `GL_TL`-`GL_BR`), free from about $bfa8.
+  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `GRID_ORIG`, `MM_CODE` (the city map's character codes), the comic bubble glyphs (`WORD_GLYPHS`, `GL_TL`-`GL_BR`) and the greeting font (`GREET_GLY`): full up to $bff9.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
@@ -324,7 +332,7 @@ Heavy frames (`scrolled`) skip the HUD redraw and the engine sound update.
 
 Colour RAM (the "y" pixels: windows, cabs, signs, stripes) is one value per
 screen row, the colour of the block row shown there (`bandCols` in
-gfx_city.asm, `BAND_TAB` after the dancers: cyan, yellow, purple, green,
+gfx_city.asm, `band_tab` in the program: cyan, yellow, purple, green,
 white; no red, that is the getaway car; the suburb yellow). Block rows
 change colour between a street row and the next sidewalk, where no "y"
 pixels are, so it never has to scroll sideways: when a picture with another

@@ -10,7 +10,7 @@
 
 // the colour of the "y" pixels per block row 0-16 (cyan, purple, green, white,
 // yellow; no red: that is the getaway car; 13-16 the suburb, yellow there): boogie.asm sets colour RAM per
-// screen row as the camera scrolls up and down (BAND_TAB, band_rows)
+// screen row as the camera scrolls up and down (band_tab, band_rows)
 .var bandCols = List().add(3, 7, 4, 3, 5, 7, 1, 3, 4, 7, 5, 3, 4, 7, 7, 7, 7)
 
 .const CL_FREE = 0              // class bits: 1 = blocks the car, 2 = blocks the walker
@@ -595,6 +595,8 @@
 .eval gset(1, 15, dFriend)
 .var friendX = blockPX(1) + FRIEND_DX
 .var friendY = blockPY(15) + FRIEND_DY
+.const GREET_X = blockPX(1) / 8 + LBX + 4 - 8   // the greeting bubble (16 wide): centred over the
+.const GREET_Y = blockPY(15) / 8 + LBY - 4      // friend's house, just above it (world characters)
 // the rest: offices in the city, houses (now and then a park) in the suburb
 .for (var j = 0; j < GH; j++) {
     .for (var i = 0; i < GW; i++) {
@@ -670,7 +672,8 @@
 .var bubbleWords = List().add("KAPOW!", "BLAM!", "ZOWIE!", "WHAM!", "BOOM!", "POW!", "BANG!", "ZAP!",
                               "CRASH!", "BAM!", "SWAG!", "YOINK!", "LOOT!", "CASH!", "KABOOM!", "KACHING!",
                               "BUSTED!", "ESCAPED!", "TOO SLOW!",   // 16-18: messages
-                              "SAFE! LEVEL UP!", "HOT CAR!", "LOSE THE COPS!")   // 19-21: at the friend's house
+                              "SAFE! LEVEL UP!", "HOT CAR!", "LOSE THE COPS!",   // 19-21: at the friend's house
+                              "       ")   // 22: blank, for the greeting (W_GREET)
 .var glyphOrder = ""
 .for (var w = 0; w < bubbleWords.size(); w++) {
     .var s = bubbleWords.get(w)
@@ -782,3 +785,70 @@
         .eval g = GW * GH
     }
 }
+
+// ---------------------------------------------------------------- the greeting
+// The friend greets Vinnie in a white bubble over his house, in a small
+// blocky font with a drop shadow (3 x 6 letters, the shadow one pixel right
+// and down in asphalt grey). Its 15 characters borrow GREET_CH.. for the
+// time it is shown: city characters that never appear in the suburb (the
+// screen there shows only suburb blocks); chase.asm saves them in MMBUF.
+.var subUsed = Hashtable()
+.var subDesigns = List().add(dHouses.get(0), dHouses.get(1), dHouses.get(2), dSubPark, dFriend, dSubBank, dSubCard)
+.for (var d = 0; d < subDesigns.size(); d++) .for (var i = 0; i < BW * BH; i++) .eval subUsed.put("" + blocks.get(subDesigns.get(d)).get(i), true)
+.var anywhere = List().add(WALLCH, WALL_SUB, ROADCH, SKID_V, SKID_H, SKID_U, SKID_D)   // (drawn at run time)
+.for (var i = 0; i < anywhere.size(); i++) .eval subUsed.put("" + anywhere.get(i), true)
+.var runS = 0
+.var runL = 0
+.var greetStart = -1
+.for (var c = 1; c < CITY_CHARS && greetStart < 0; c++) {
+    .if (subUsed.containsKey("" + c)) {
+        .eval runL = 0
+    } else {
+        .if (runL == 0) .eval runS = c
+        .eval runL = runL + 1
+        .if (runL == 15) .eval greetStart = runS
+    }
+}
+.errorif greetStart < 0, "no 15 city-only characters in a row for the greeting"
+.const GREET_CH = greetStart
+.var greetLetters = @"AYVINE!HOWUD'?"          // + 14: blank
+.var greetFont = Hashtable()
+.function gfont(c, r0, r1, r2, r3, r4, r5) { .eval greetFont.put(c, List().add(r0, r1, r2, r3, r4, r5)) }
+.eval gfont("A", ".#.", "#.#", "#.#", "###", "#.#", "#.#")
+.eval gfont("Y", "#.#", "#.#", ".#.", ".#.", ".#.", ".#.")
+.eval gfont("V", "#.#", "#.#", "#.#", "#.#", "#.#", ".#.")
+.eval gfont("I", "###", ".#.", ".#.", ".#.", ".#.", "###")
+.eval gfont("N", "##.", "#.#", "#.#", "#.#", "#.#", "#.#")
+.eval gfont("E", "###", "#..", "##.", "#..", "#..", "###")
+.eval gfont("!", ".#.", ".#.", ".#.", ".#.", "...", ".#.")
+.eval gfont("H", "#.#", "#.#", "###", "#.#", "#.#", "#.#")
+.eval gfont("O", ".#.", "#.#", "#.#", "#.#", "#.#", ".#.")
+.eval gfont("W", "#.#", "#.#", "#.#", "###", "###", "#.#")
+.eval gfont("U", "#.#", "#.#", "#.#", "#.#", "#.#", "###")
+.eval gfont("D", "##.", "#.#", "#.#", "#.#", "#.#", "##.")
+.eval gfont(@"'", ".#.", ".#.", "...", "...", "...", "...")
+.eval gfont("?", "##.", "..#", ".#.", ".#.", "...", ".#.")
+.function gpix(c, x, y) {
+    .if (x < 0 || x > 2 || y < 0 || y > 5) .return false
+    .return greetFont.get(c).get(y).charAt(x) == "#"
+}
+.var greetGlyphs = List()                       // 7 rows a letter (the 8th is blank)
+.for (var g = 0; g < greetLetters.size(); g++) {
+    .var c = greetLetters.charAt(g)
+    .for (var y = 0; y < 7; y++) {
+        .var v = 0
+        .for (var x = 0; x < 4; x++) {
+            .var px = gpix(c, x, y) ? 2 : (gpix(c, x - 1, y - 1) ? 0 : 3)   // b, shadow, colour RAM (white)
+            .eval v = v * 4 + px
+        }
+        .eval greetGlyphs.add(v)
+    }
+}
+.function greetCode(c) {
+    .for (var i = 0; i < greetLetters.size(); i++) .if (greetLetters.charAt(i) == c) .return GREET_CH + i
+    .return GREET_CH + 14
+}
+.var greetT1 = @" AYY VINNIE!  "
+.var greetT2 = @"HOW YOU DOIN'?"
+.errorif greetT1.size() != 14 || greetT2.size() != 14, "the greeting lines are 14 characters"
+.print "Greeting characters: " + GREET_CH + "-" + (GREET_CH + 14)
