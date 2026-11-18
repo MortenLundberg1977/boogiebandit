@@ -23,8 +23,8 @@
 .const LAWN_COL = 5             // $d022 in the suburb: grass (green)
 .const GREEN_BASE = 55           // raster line of world y = cam_y (row 0 of the screen at fine y 0)
 .const ROOF_COL = 0             // $d023 roofs, tyre marks (black)
-.const HI_COL = 7               // color RAM: yellow cabs, lines, windows
-.const COLRAM = $08 | HI_COL    // multicolor + yellow for every cell
+.const HI_COL = 7               // color RAM: yellow (title, map; the city gets BAND_TAB per block row)
+.const COLRAM = $08 | HI_COL    // multicolor + yellow
 
 .const SCR_A = $c000
 .const SCR_B = $c400
@@ -48,6 +48,7 @@
 .const MT_RH = MT_RG + 256
 .const MT_RL = MT_RH + 256
 .const DANCE_SRC = MT_RL + 256      // the 4 dancer sprites (copied to DANCE_SPR for the score page)
+.const BAND_TAB = DANCE_SRC + 256   // the colour of the "y" pixels per block row (0-16; 13-16 the suburb)
 .const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -442,6 +443,11 @@
 .label dr_end = b2alloc(1)
 .label dc_k = b2alloc(1)
 .label dance_flag = b2alloc(1)     // the score page's dancers are on
+.label lv_cy = b2alloc(1)           // the city's colour bands: top row they are set for ($ff: redo)
+.label band_w = b2alloc(1)          // (band_rows: the block row, rows left in it)
+.label br_left = b2alloc(1)
+.label rowc = b2alloc(25)           // colour RAM value of each screen row
+.errorif bss2 > $0300, "the second array area is full"
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -698,7 +704,7 @@ irq:
     lda in_game
     bne !+
     jmp irq_taken
-!:
+!:  jsr band_rows                   // scrolled a row: the colour bands follow
     // sprites 4-6 go to the VIC now; 0-3 and 7 wait for the split below
     // the HUD row (irq_split)
 .for (var s = 0; s < 8; s++) {
@@ -1556,6 +1562,10 @@ gl_br:      .fill glBR.size(), glBR.get(i)
 // page: map_at's callers check the page)
 grid_orig:  .fill GW * GH, (BLOCKS >> 8) + 2 * grid.get(i)
 gmul:       .fill GH, i * GW
+// small tables in what would be padding before the wall rows
+d018_tab:   .byte D018_A, D018_B
+bit_tab:    .byte 1, 2, 4, 8, 16, 32, 64, 128
+bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
 .align 64
 wall_row:   .fill 32, WALLCH
 wall_sub:   .fill 32, WALL_SUB
@@ -1564,7 +1574,10 @@ wall_sub:   .fill 32, WALL_SUB
 guard_spr:  .fill guardSpr.size(), guardSpr.get(i)
 .errorif guardSpr.size() != 512, "the guard is 8 sprites"
 
-// the city palette, one colour RAM value everywhere
+// the city palette. The "y" pixels (windows, cabs, signs) take their colour
+// from colour RAM, set per screen row from the block row shown there
+// (BAND_TAB): the IRQ redoes the rows that changed when a new picture with
+// another top row is shown (band_rows).
 city_colours:
     lda #0
     sta $d020
@@ -1582,6 +1595,65 @@ city_colours:
     sta $db00,x
     inx
     bne !-
+    ldx #24
+!:  sta rowc,x
+    dex
+    bpl !-
+    lda #$ff                        // the next picture sets the bands
+    sta lv_cy
+    rts
+
+// colour RAM rows 0-24 for top world row lv_cy (in the IRQ: only the rows
+// whose band changed, one or two per row scrolled). World row w is in block
+// row (w + 5) / 16.
+band_rows:
+    lda disp_cy                     // (the top row of the picture shown now)
+    cmp lv_cy
+    beq br_done
+    sta lv_cy
+    clc
+    adc #5
+    tay
+    and #15                         // rows of this band after the top one
+    eor #15
+    sta br_left
+    tya
+    ror                             // the block row (9 bits: rows 251-255 are 16)
+    lsr
+    lsr
+    lsr
+    sta band_w
+    ldx #0
+br_band:
+    ldy band_w
+    lda BAND_TAB,y
+br_loop:
+    cmp rowc,x
+    beq br_next
+    sta rowc,x
+    ldy srow_lo,x
+    sty br_st + 1
+    pha
+    lda srow_hi,x
+    ora #$d8
+    sta br_st + 2
+    pla
+    ldy #39
+br_st:
+    sta $d800,y
+    dey
+    bpl br_st
+br_next:
+    inx
+    cpx #25
+    beq br_done
+    dec br_left
+    bpl br_loop
+    lda #15
+    sta br_left
+    inc band_w
+    bne br_band
+br_done:
     rts
 
 // how long the main loop took this frame (raster lines since the IRQ, halved)
@@ -2741,7 +2813,7 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     lsr
     lsr
     lsr
-    and #3
+    and #7
     sta st_kind
     // it comes off the street (in a private copy of its block: it is back
     // next game, or when that copy is needed for another block)
@@ -2753,7 +2825,14 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     pla
     tax
     lda kind_col,x
-    sta car_col
+    bpl !+                          // ($ff) a cab: the colour of its screen row
+    lda st_row
+    sec
+    sbc disp_cy
+    tax
+    lda rowc,x
+    and #7
+!:  sta car_col
     // the car stands where the parked one was, facing north
     lda #0
     sta car_xh
@@ -3261,11 +3340,17 @@ cb_row:
     clc
     adc bub_x
     jsr map_fill                    // (row x, from column a)
+    lda bub_y                       // the colour of that row's band
+    clc
+    adc t3
+    tax
+    lda rowc,x
+    sta t2
     ldy bub_w
     dey
 !:  lda tbuf,y
     sta (zp1),y
-    lda #COLRAM
+    lda t2
     sta (zdst),y
     dey
     bpl !-
@@ -3780,7 +3865,6 @@ shift_half1:
     jmp shift_ab + HALF
 !:  jmp shift_ba + HALF
 
-d018_tab: .byte D018_A, D018_B
 
 full_redraw:
     lda #0
@@ -4080,7 +4164,6 @@ sp_off:
     clc
     rts
 
-bit_tab: .byte 1, 2, 4, 8, 16, 32, 64, 128
 
 place_sprites:
     lda state                       // during a message: as before it
@@ -4257,7 +4340,6 @@ pa_go:
     sta sh_ptr + 3
     jmp place_npcs
 
-bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
 
 // a = direction 0-15 (0 = north, clockwise) of the vector (ax, ay)
 direction16:
@@ -4602,7 +4684,8 @@ hd_common:
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(floor((r - BLK_Y0) / 8), 2))
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(r - BLK_Y0, 8) * 32)
 .for (var i = 0; i < danceSpr.size(); i++) .eval blockBytes.add(danceSpr.get(i))   // the dancers (DANCE_SRC)
-.errorif DANCE_SRC + 256 > $c000, "the map tables and the dancers must end below $c000"
+.for (var i = 0; i < bandCols.size(); i++) .eval blockBytes.add($08 | bandCols.get(i))   // BAND_TAB
+.errorif BAND_TAB + bandCols.size() > $c000, "the map tables, the dancers and the bands must end below $c000"
 .var mapPacked = rlePack(blockBytes)
 .const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0
@@ -4654,9 +4737,9 @@ bubble_dy:  .byte 256 - 8, 256 - 10, 256 - 12, 256 - 9, 256 - 11
 sqr_lo:     .fill 512, <floor(i * i / 4)
 sqr_hi:     .fill 512, >floor(i * i / 4)
 park_tab:   .fill 256, parkInfo.get(i)
-park_chars: .fill 24, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
-kind6:      .byte 0, 6, 12, 18
-kind_col:   .byte 7, 1, 0, 0        // stolen cab yellow, white car, black cars
+park_chars: .fill 30, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
+kind6:      .byte 0, 6, 12, 18, 24
+kind_col:   .byte $ff, 1, 0, 0, 15  // stolen cab ($ff: its band's colour), white car, black cars, grey car
 tail_end:
 }
 

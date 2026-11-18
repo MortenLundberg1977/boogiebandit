@@ -6,7 +6,12 @@
 //   .  asphalt          $d021 (ROAD_COL)
 //   w  sidewalk/light   $d022 (WALK_COL)
 //   b  brown            $d023 (ROOF_COL)
-//   y  yellow           color RAM (one value for the whole screen)
+//   y  colour RAM       one value per screen row: its block row's colour (bandCols)
+
+// the colour of the "y" pixels per block row 0-16 (cyan, purple, green, white,
+// yellow; no red: that is the getaway car; 13-16 the suburb, yellow there): boogie.asm sets colour RAM per
+// screen row as the camera scrolls up and down (BAND_TAB, band_rows)
+.var bandCols = List().add(3, 7, 4, 3, 5, 7, 1, 3, 4, 7, 5, 3, 4, 7, 7, 7, 7)
 
 .const CL_FREE = 0              // class bits: 1 = blocks the car, 2 = blocks the walker
 .const CL_SOLID = 3
@@ -64,8 +69,8 @@
 .var SKID_H = one(rows8("....", "....", "....", "bbbb", "bbbb", "....", "....", "...."), CL_FREE)
 .var SKID_U = one(rows8("...b", "...b", "..bb", "..b.", ".bb.", ".b..", "bb..", "b..."), CL_FREE)   // "/"
 .var SKID_D = one(rows8("b...", "bb..", ".b..", ".bb.", "..b.", "..bb", "...b", "...b"), CL_FREE)   // "\"
-.var AVL = one(rows8("...y", "...y", "...y", "...y", "...y", "...y", "...y", "...y"), CL_FREE)
-.var AVR = one(rows8("y...", "y...", "y...", "y...", "y...", "y...", "y...", "y..."), CL_FREE)
+.var AVL = one(rows8("...w", "...w", "...w", "...w", "...w", "...w", "...w", "...w"), CL_FREE)
+.var AVR = one(rows8("w...", "w...", "w...", "w...", "w...", "w...", "w...", "w..."), CL_FREE)
 .var STDASH = one(rows8("....", "....", "....", "....", "wwww", "....", "....", "...."), CL_FREE)   // the middle row of a 5-row street: line at y + 4
 .var ZEB_H = one(rows8("wwww", "wwww", "....", "....", "wwww", "wwww", "....", "...."), CL_FREE)
 .var ZEB_V = one(rows8("ww..", "ww..", "ww..", "ww..", "ww..", "ww..", "ww..", "ww.."), CL_FREE)
@@ -165,7 +170,7 @@
     ".yyyyyy.", ".yywwyy.", ".yyyyyy.", ".yyyyyy.", ".yyyyyy.", ".yyyyyy.", ".yyyyyy.", ".bbbbbb.",
     ".yyyyyy.", ".yyyyyy.", "..yyyy..", "........", "........", "........", "........", "........"), CL_SOLID)
 // other parked cars: the city has one colour RAM value, so they use the
-// colours the characters have: white, black, black with yellow stripes
+// colours the characters have: white, black, black with stripes
 .var carW = stamp(List().add(
     "........", "........", "..wwww..", ".wwwwww.", ".wwwwww.", ".bbbbbb.", ".bbbbbb.", ".wwwwww.",
     ".wwwwww.", ".wwwwww.", ".wwwwww.", ".wwwwww.", ".wwwwww.", ".bbbbbb.", ".bbbbbb.", ".wwwwww.",
@@ -178,18 +183,24 @@
     "........", "........", "..byyb..", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bwwwwb.", ".bbyybb.",
     ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bbyybb.", ".bwwwwb.", ".bbyybb.", ".bbyybb.",
     ".bbyybb.", ".bbyybb.", "..byyb..", "........", "........", "........", "........", "........"), CL_SOLID)
-.var parkedCars = List().add(cabV, carW, cabV, carB, carW, carS, cabV, carB)
+// a grey car: asphalt with a black outline, white windows
+.var carG = stamp(List().add(
+    "........", "........", "..bbbb..", ".b....b.", ".b....b.", ".bwwwwb.", ".bwwwwb.", ".b....b.",
+    ".b....b.", ".b....b.", ".b....b.", ".b....b.", ".b....b.", ".bwwwwb.", ".b....b.", ".b....b.",
+    ".b....b.", ".b....b.", "..bbbb..", "........", "........", "........", "........", "........"), CL_SOLID)
+// the colourful ones (cabV, carS) take the colour of their block row
+.var parkedCars = List().add(cabV, carW, carG, carB, cabV, carS, carG, carW)
 // which car stands at (x, y): from the position, so no extra random calls
 // (the rest of the city stays the same)
 .function parked(x, y) {
     .var i = mod(x * 5 + y * 3 + floor(y / 7), parkedCars.size())
-    .if (inSub && (i == 1 || i == 4)) .return carB            // (a white car would be green there)
     .var car = parkedCars.get(i)
+    .if (inSub && (i == 1 || i == 2 || i == 6 || i == 7)) .return carB   // (white would be green there)
     .return car
 }
 // for stealing them: the kinds (colour of the stolen car in boogie.asm,
 // kind_col) and per character $80 + kind * 8 + row * 2 + column, else 0
-.var carKinds = List().add(cabV, carW, carB, carS)
+.var carKinds = List().add(cabV, carW, carB, carS, carG)
 .var parkInfo = List()
 .for (var i = 0; i < 256; i++) .eval parkInfo.add(0)
 .for (var k = 0; k < carKinds.size(); k++) {
@@ -347,6 +358,8 @@
 .for (var c = 0; c < parkedCars.size(); c++) .for (var y = 0; y < 3; y++) .for (var x = 0; x < 2; x++) .eval subKeep.put("" + parkedCars.get(c).get(y).get(x), true)
 .var subYellow = Hashtable()
 .eval subYellow.put("" + STDASH, true)
+.eval subYellow.put("" + AVL, true)
+.eval subYellow.put("" + AVR, true)
 .eval subYellow.put("" + ZEB_H, true)
 .eval subYellow.put("" + ZEB_V, true)
 .for (var x = 0; x < 5; x++) .eval subYellow.put("" + CARDWORD.get(0).get(x), true)
