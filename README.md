@@ -18,7 +18,8 @@ the latest version; older ones on the [Releases](https://github.com/MortenLundbe
 also on the disk image (`LOAD"BOOGIE REU",8`). The same game, plus extras
 for machines with a RAM Expansion Unit (a 1764/1750, or a Kung Fu Flash or
 emulator with its REU switched on): when Vinnie is busted, the front page of
-THE DAILY BOOGIE shows his lineup photo. Without an REU it plays exactly like
+THE DAILY BOOGIE shows his lineup photo. A yellow REU badge on the title
+picture shows that the REU was found. Without an REU it plays exactly like
 the standard one.
 
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)

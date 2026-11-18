@@ -232,6 +232,9 @@ show_picture:
     lda #>$d800
     sta zdst + 1
     jsr unpack
+#if REU
+    jsr REU_TITLE                   // the REU edition: its badge, if there is an REU
+#endif
     jmp bm_show
 
 // the high score page

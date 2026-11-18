@@ -1868,30 +1868,13 @@ bust:
     sta hud_dirty
     jsr last_life
 #if REU
-    jsr reu_news                    // the REU edition: the newspaper first
+    jsr REU_NEWS                    // the REU edition: the newspaper first
 #endif
     lda #SFX_CRASH
     jsr sfx_play
     lda #W_BUSTED
     ldx #2
     jmp show_msg
-
-#if REU
-// the newspaper (REU edition): its code from the REU into screen B, run it
-// (reu_init turns this into an rts when there is no REU)
-reu_news:
-    ldx #6
-!:  lda rn_dma,x
-    sta $df02,x
-    dex
-    bpl !-
-    lda #$91
-    sta $df01
-    jmp NEWS_OV
-rn_dma:     .word NEWS_OV, R_NEWS_OV
-            .byte 0
-            .word R_BITMAP
-#endif
 
 // arrested: the police take the car (he goes on on foot from where he was)
 // and the loot of the last job

@@ -36,7 +36,10 @@
 .const R_BITMAP = $0400
 .const R_SCREEN = R_BITMAP + 8000
 .const R_COLOUR = R_SCREEN + 1024
-.const EXTRA_LEN = R_COLOUR + 1024
+.const R_BADGE = R_COLOUR + 1024   // the title's REU badge: 40 bitmap bytes, 5 screen, 5 colour
+.const EXTRA_LEN = R_BADGE + 50
+.const REU_TITLE = $0100            // page 1 (under the stack): fetch the REU code,
+.const REU_NEWS = $0103             // run its badge or newspaper part (rts without an REU)
 #endif
 .const SPRHI = $d800
 .const BITMAP = $e000
@@ -4886,24 +4889,23 @@ extras:
 news_ov_src:
 .pseudopc NEWS_OV {
 news_ov:
+    jmp nv_main                     // + 0: the newspaper
+nv_badge:                           // + 3: the title's REU badge
+    lda #3 * 7 - 1
+    sta nv_stop
+    ldy #6 * 7 - 1
+    jmp nv_get
+nv_main:
     lda #0
     sta in_game
     sta $d015
     jsr sound_off
     lda #$0b
     sta $d011
-    ldy #3 * 7 - 1                  // bitmap, screen, colour RAM from the REU
-nv_blk:
-    ldx #6
-!:  lda nv_dma,y
-    sta $df02,x
-    dey
-    dex
-    bpl !-
-    lda #$91
-    sta $df01
-    tya
-    bpl nv_blk
+    lda #$ff                        // bitmap, screen, colour RAM from the REU
+    sta nv_stop
+    ldy #3 * 7 - 1
+    jsr nv_get
     jsr bm_show
     lda #1                          // white paper, a grey edge
     sta $d021
@@ -4922,6 +4924,20 @@ nv_blk:
     sta $d020
     jmp sm_exit                     // back to the streets (as from the city map)
 nv_t:   .byte 0
+// REU -> C64: the blocks of nv_dma from index y down to nv_stop + 1
+nv_get:
+    ldx #6
+!:  lda nv_dma,y
+    sta $df02,x
+    dey
+    dex
+    bpl !-
+    lda #$91
+    sta $df01
+    cpy nv_stop
+    bne nv_get
+    rts
+nv_stop: .byte 0
 nv_dma: .word $d800, R_COLOUR       // (the last block is taken first)
         .byte 0
         .word 1000
@@ -4931,6 +4947,15 @@ nv_dma: .word $d800, R_COLOUR       // (the last block is taken first)
         .word $e000, R_BITMAP
         .byte 0
         .word 8000
+        .word $d800 + 1, R_BADGE + 45   // the badge (row 0, columns 1-5)
+        .byte 0
+        .word 5
+        .word SCR_A + 1, R_BADGE + 40
+        .byte 0
+        .word 5
+        .word $e000 + 1 * 8, R_BADGE
+        .byte 0
+        .word 40
 news_ov_end:
 }
 .errorif news_ov_end - news_ov > R_BITMAP, "the newspaper code is too long"
@@ -4938,6 +4963,48 @@ news_ov_end:
 .fill 8000, newsBitmap.get(i)
 .fill 1024, newsScreen.get(i)
 .fill 1024, newsColour.get(i)
+// the badge: "REU" in yellow on black, one row of 5 cells (01 black, 10 yellow)
+.var badgeBits = List()
+.for (var c = 0; c < 5; c++) .for (var r = 0; r < 8; r++) {
+    .var v = 0
+    .for (var p = 0; p < 4; p++) {
+        .var x = c * 4 + p - 3
+        .var on = false
+        .if (x >= 0 && x < 15 && r < 7 && mod(x, 5) < 4) .eval on = fontPix("REU".charAt(floor(x / 5)), mod(x, 5), r)
+        .eval v = v * 4 + (on ? 2 : 1)
+    }
+    .eval badgeBits.add(v)
+}
+.fill 40, badgeBits.get(i)
+.fill 5, $07
+.fill 5, 0
+.errorif * != extras + EXTRA_LEN, "the REU extras' length is wrong"
+// page 1 (copied there by reu_init): fetch the REU code into screen B and
+// run its badge (REU_TITLE) or newspaper (REU_NEWS) part
+p1_src:
+.pseudopc REU_TITLE {
+p1_title:
+    lda #<(NEWS_OV + 3)
+    .byte $2c                       // (bit: skips the next lda)
+p1_news:
+    lda #<NEWS_OV
+    sta p1_jmp + 1
+    ldx #6
+!:  lda p1_dma,x
+    sta $df02,x
+    dex
+    bpl !-
+    lda #$91
+    sta $df01
+p1_jmp:
+    jmp NEWS_OV
+p1_dma:     .word NEWS_OV, R_NEWS_OV
+            .byte 0
+            .word R_BITMAP
+p1_end:
+}
+.errorif p1_news != REU_NEWS, "REU_NEWS must be p1_news"
+.errorif p1_end - p1_title > 64, "the page 1 code is too long"
 // run once at start (before anything is unpacked over this): is there an
 // REU? then the extras go into it
 reu_init:
@@ -4971,10 +5038,16 @@ reu_init:
     bpl !-
     lda #$90
     sta $df01
+    ldx #p1_end - p1_title - 1     // the page 1 code
+!:  lda p1_src,x
+    sta REU_TITLE,x
+    dex
+    bpl !-
     rts
 ri_none:
-    lda #$60                        // no REU: no newspaper
-    sta reu_news
+    lda #$60                        // no REU: no badge, no newspaper
+    sta REU_TITLE
+    sta REU_NEWS
     rts
 reu_tb:     .byte 0
 ri_test:    .word reu_tb, $fff0

@@ -192,15 +192,23 @@ release has both .prg files. The REU edition's extras are assembled at $a000
 (after the start-up data; a LOAD may fill RAM up to $cfff, never $d000, the
 I/O area): at start (`start`, before anything is unpacked over them)
 `reu_init` checks for an REU (a byte stashed and fetched back) and stashes
-$a000-`EXTRA_LEN` into REU address 0; with no REU it turns `reu_news` into an
-`rts`, so the program plays as the standard one. Now in the REU:
+$a000-`EXTRA_LEN` into REU address 0, and copies two small entry points into
+page 1 under the stack (`p1_src` -> `REU_TITLE` = $0100, `REU_NEWS` = $0103:
+fetch the REU code into $c400 and jump to its badge or newspaper part); with
+no REU both become an `rts`, so the program plays as the standard one. The
+program itself only has the three `jsr`s (start, `show_picture`, `bust`).
+Now in the REU:
 - 0: the newspaper code (`news_ov`, assembled for `NEWS_OV` = $c400, screen B,
   free while a bitmap page is shown), $0400: the newspaper page (bitmap 8000
   bytes, screen 1024, colour RAM 1024; `gfx_news.asm` paints it at build time:
   THE DAILY BOOGIE, BUSTED!, a police lineup photo of Vinnie with his hands
   up next to an officer, columns of grey "text", EXTRA! in red; its own random
   numbers, so the city stays the same).
-- `bust` calls `reu_news` (chase.asm): fetch the code to $c400 and run it: it
+- The title picture gets a yellow-on-black "REU" badge in the top left
+  (`show_picture` calls `REU_TITLE`: `nv_badge` fetches 40 bitmap bytes and 5
+  screen and colour bytes, `R_BADGE`), only when an REU was found: it shows
+  that the REU works.
+- `bust` calls `REU_NEWS` (chase.asm): fetch the code to $c400 and run it: it
   fetches the page into $e000/$c000/$d800 (REU DMA; colour RAM is written
   through the I/O area), shows it on white paper for 4 s or until fire, and
   goes back to the streets through `sm_exit` (as from the city map). Then
