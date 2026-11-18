@@ -30,11 +30,12 @@ top right corner of the title picture.
 - The loot only counts once it is at your friend's house, out in the green
   suburb at the south end of town (the yellow roof, bottom left; yellow on the
   city map). Stop in his driveway, but not in the getaway car (steal another
-  one first) and not with the police after you: SAFE! LEVEL UP! The loot goes
+  one or have it repainted first) and not with the police after you: SAFE!
+  LEVEL UP! The loot goes
   to your score with a $1,000 x level bonus, and the police start gentle
   again. You can do several jobs before you go there, but the police get
-  tougher with each one. While you carry loot in a clean car, the arrow
-  points to your friend's house.
+  tougher with each one. When you carry loot in a clean car, the arrow
+  turns to your friend's house.
 - If one catches you, you're BUSTED!: the police keep your car and all the
   loot you carry, and you go on on foot.
 - Steal a parked car: walk up to one and press fire. During a chase, the
@@ -45,9 +46,12 @@ top right corner of the title picture.
   or duck behind a building), and from the third job on they set up
   roadblocks ahead of you. You can just squeeze past one on the sidewalk.
 - Three paint garages (look for the yellow PAINT sign; small yellow marks on
-  the city map). Stop inside the spray booth during a chase: $300 for a new
-  colour (always a different one; it takes a second), and the police lose
-  your trail.
+  the city map). Stop inside the spray booth: $300 for a new colour (always a
+  different one; it takes a second). Your car is then no longer the getaway
+  car, so you can take the loot to your friend's house in it, and during a
+  chase the police lose your trail.
+- The arrow (lower left): press A to switch between the next job (yellow
+  arrow), your friend's house (green) and the nearest paint garage (pink).
 - Three hearts, then game over. The best five bandits make the table on the
   title screen.
 - Watch out for the yellow cabs.
@@ -61,6 +65,7 @@ top right corner of the title picture.
 | Fire | get out of the car (nearly stopped), get back in (next to it), steal a parked car (next to it) |
 | SPACE | city map (fire or SPACE to drive on) |
 | M | music on / off |
+| A | the arrow: next job / friend's house / nearest paint garage |
 | D | raster time bar in the border (CPU time of each frame) |
 
 Floor it from a standstill or slide through a corner and you leave rubber on

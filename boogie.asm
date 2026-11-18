@@ -37,7 +37,7 @@
 .const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
 .const SP_GUARD = 236             // + dir*2 + step
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
-.const TAIL_PAGES = 10            // the tables moved out of the program (see tail_src)
+.const TAIL_PAGES = 11            // the tables moved out of the program (see tail_src)
 .const TEMP = $e000               // where they wait during start-up
 .const MAP = $8000
 .const D018_A = $04             // screen $c000, chars $d000
@@ -101,6 +101,8 @@
 .const W_HOT = 20
 .const W_COPS = 21
 .const FRIEND = NBANKS            // door_xl/... index of the friend's driveway
+.const GARAGE0 = NBANKS + 1       // door_xl/... index of the first paint garage
+.const NGARAGE = garageX.size()
 .const SPLIT_LINE = 80           // the HUD sprites end at line 76
 .const SPLIT_MIN_Y = 88          // shared sprites only below the HUD row
 .const JOB_TIME = $60            // seconds (BCD) for the first job
@@ -399,6 +401,8 @@
 .label carry_h = balloc(1)         // ten thousands)
 .label level = balloc(1)           // 1, 2, ... (one more for each delivery)
 .label safe_in = balloc(1)         // 1 while the car stands in the friend's driveway
+.label paint_lock = balloc(1)      // 1 after a paint job until the car leaves the booth
+.label arrow_mode = balloc(1)      // the arrow points to: 0 the next job, 1 the friend's house, 2 a paint garage
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -674,7 +678,7 @@ irq:
     lda sh_ptr + s
     sta lv_ptr + s
     }
-    .if (s < 3 || s == 7) {
+    .if (s < 4 || s == 7) {
     lda sh_col + s
     sta lv_col + s
     }
@@ -852,6 +856,8 @@ irq_split:
     sta $d028
     lda lv_col + 2
     sta $d029
+    lda lv_col + 3                  // the arrow: its colour shows what it points to
+    sta $d02a
     lda lv_col + 7
     sta $d02e
     lda lv_en
@@ -917,12 +923,21 @@ read_input:
     sta joy_new
     lda joy
     sta joy_prev
-    // keys: M = music on/off, D = raster time bar
+    // keys: M = music on/off, D = raster time bar, A = what the arrow
+    // points to
     lda #$ef
     sta $dc00
     lda $dc01
     eor #$ff
     and #$10
+    sta t0
+    lda #$fd
+    sta $dc00
+    lda $dc01
+    eor #$ff
+    and #$04
+    lsr
+    ora t0
     sta t0
     lda #$fb
     sta $dc00
@@ -938,7 +953,7 @@ read_input:
     and #$10
     asl
     ora t0
-    ora key_ovr                     // test hook: $20 SPACE, $10 M, $04 D
+    ora key_ovr                     // test hook: $20 SPACE, $10 M, $04 D, $02 A
     sta t0
     lda keys_prev
     eor #$ff
@@ -963,6 +978,16 @@ read_input:
     lda debug_bar
     eor #1
     sta debug_bar
+!:  txa
+    and #$02
+    beq !+
+    ldx arrow_mode                  // A: next job -> friend -> paint -> ...
+    inx
+    cpx #3
+    bcc ri_mode
+    ldx #0
+ri_mode:
+    stx arrow_mode
 !:  rts
 
 rng_next:
@@ -1175,6 +1200,8 @@ gs_ring:
     sta carry_l
     sta carry_h
     sta safe_in
+    sta paint_lock
+    sta arrow_mode
     sta ring_pos
     sta frame_ready
     sta wanted
@@ -1767,7 +1794,8 @@ dd_vel:
     lda bx_h
     sta car_xh
     jmp dd_movey
-!:  inc bump
+!:  lda #1                          // x blocked
+    sta bump
 dd_movey:
     lda car_yf
     clc
@@ -1797,10 +1825,50 @@ dd_movey:
     lda by_h
     sta car_yh
     jmp dd_bumped
-!:  inc bump
+!:  lda bump                        // y blocked
+    ora #2
+    sta bump
 dd_bumped:
     lda bump
-    beq dd_frame
+    bne !+
+    jmp dd_frame
+    // only one way blocked and it is not the way the car mainly goes: it
+    // scrapes along the wall (a little slower) instead of bouncing off
+!:  cmp #3
+    beq dd_bounce
+    jsr abs_vel                     // t0/t1 = |vx|, t2/t3 = |vy|
+    lda t0
+    cmp t2
+    lda t1
+    sbc t3                          // carry set: |vx| >= |vy|
+    lda #0
+    rol                             // 1: mainly sideways
+    eor bump                        // x blocked (1) and mainly sideways (1),
+    and #1                          // or y blocked (2) and mainly up/down (0)
+    beq dd_bounce                   // = 0: head on
+    lda spd_h                       // speed - speed / 32
+    cmp #$80
+    ror
+    sta t1
+    lda spd_l
+    ror
+    sta t0
+    ldx #4
+!:  lda t1
+    cmp #$80
+    ror t1
+    ror t0
+    dex
+    bne !-
+    lda spd_l
+    sec
+    sbc t0
+    sta spd_l
+    lda spd_h
+    sbc t1
+    sta spd_h
+    jmp dd_frame
+dd_bounce:
     jsr abs_speed                   // bounce back a little
     lda t1
     beq !+
@@ -1846,6 +1914,34 @@ abs_speed:
     lda #0
     sbc t1
     sta t1
+!:  rts
+
+// t0/t1 = |vx|, t2/t3 = |vy| (the car's velocity this frame)
+abs_vel:
+    lda vx_l
+    sta t0
+    lda vx_h
+    sta t1
+    bpl !+
+    lda #0
+    sec
+    sbc t0
+    sta t0
+    lda #0
+    sbc t1
+    sta t1
+!:  lda vy_l
+    sta t2
+    lda vy_h
+    sta t3
+    bpl !+
+    lda #0
+    sec
+    sbc t2
+    sta t2
+    lda #0
+    sbc t3
+    sta t3
 !:  rts
 
 // res = speed * a / 128 (a = signed sine), signed 8.8 result.
@@ -2524,7 +2620,7 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     sta vy_h
     sta burn
     sta paint_t
-    sta hot                         // a clean car: not the getaway car
+    jsr clean_car                   // not the getaway car
     lda #1
     sta have_car
     lda #ST_DRIVE
@@ -3828,7 +3924,11 @@ ps_mark:
     adc #SP_MARK
     sta sh_ptr + 6
 ps_arrow:
-    // the arrow (sprite 3) points from the player to the target bank
+    // the arrow (sprite 3) points from the player to the next job, the
+    // friend's house or a paint garage (arrow_mode; its colour says which)
+    ldx arrow_mode
+    lda arrow_cols,x
+    sta sh_col + 3
     lda pstate
     cmp #ST_WALK
     bne !+
@@ -4242,10 +4342,10 @@ wheel_rx:   .fill 16, (wheelRX.get(i) + 256) & 255
 wheel_ry:   .fill 16, (wheelRY.get(i) + 256) & 255
 exit_dx:    .fill 16, (round(cos(i * PI / 8) * 15) + 256) & 255
 exit_dy:    .fill 16, (round(sin(i * PI / 8) * 15) + 256) & 255
-door_xl:    .fill NBANKS + 1, (i < NBANKS) ? <bankDoorX.get(i) : <friendX
-door_xh:    .fill NBANKS + 1, (i < NBANKS) ? >bankDoorX.get(i) : >friendX
-door_yl:    .fill NBANKS + 1, (i < NBANKS) ? <bankDoorY.get(i) : <friendY
-door_yh:    .fill NBANKS + 1, (i < NBANKS) ? >bankDoorY.get(i) : >friendY
+door_xl:    .fill goalX.size(), <goalX.get(i)
+door_xh:    .fill goalX.size(), >goalX.get(i)
+door_yl:    .fill goalY.size(), <goalY.get(i)
+door_yh:    .fill goalY.size(), >goalY.get(i)
 digit_rows: .fill digitRows.size(), digitRows.get(i)
 bubble_cols: .byte 7, 1, 3, 5
 bubble_dx:  .byte 256 - 6, 5, 256 - 2, 6, 0

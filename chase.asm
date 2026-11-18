@@ -1157,14 +1157,15 @@ nb_gone:
     rts
 
 // ---------------------------------------------------------------- paint garages
-// standing still in a spray booth during a chase: the car gets a new colour
-// for $300 and every police car loses the trail
+// standing still in a spray booth (any time): the car gets a new colour for
+// $300, is not the getaway car any more (hot = 0: it may go to the friend's
+// house) and during a chase every police car loses the trail. Once per
+// visit (paint_lock until the car leaves the booth).
+
 paint_check:
     lda state
     cmp #ST_DRIVE
-    bne pc_out
-    lda chase
-    beq pc_out
+    bne pc_rts
     lda car_yl                      // the map character under the car, 6
     sec                             // pixels above its middle (the booths
     sbc #6                          // open to the south: nose in is enough)
@@ -1197,6 +1198,8 @@ paint_check:
     lda class_tab,x
     and #CL_PAINT
     beq pc_out
+    lda paint_lock                  // just painted: not again
+    bne pc_rts
     jsr abs_speed                   // nearly stopped
     lda t1
     bne pc_rts
@@ -1214,9 +1217,15 @@ paint_check:
     cmp #PAINT_FRAMES
     bcc pc_rts
     jsr new_paint
-pc_out:
+    lda #1                          // once: drive out before the next one
+    sta paint_lock
     lda #0
     sta paint_t
+    rts
+pc_out:                             // out of the booth
+    lda #0
+    sta paint_t
+    sta paint_lock
 pc_rts:
     rts
 
@@ -1231,6 +1240,7 @@ new_paint:
     cmp car_col
     beq new_paint
     sta car_col
+    jsr clean_car                   // a new look: not the getaway car any more
     sed                             // $300 for the paint job
     sec
     lda score + 1
@@ -1591,25 +1601,98 @@ impound:
     sta carry_h
     rts
 
+// the car is not the getaway car (stolen, or a new paint job): with loot
+// on board the arrow now points to the friend's house
+clean_car:
+    lda #0
+    sta hot
+    lda carry_l
+    ora carry_h
+    beq !+
+    lda #1
+    sta arrow_mode
+!:  rts
+
+// ---------------------------------------------------------------- the arrow
+// where the arrow, the marker and the map ring point (x = door_xl/...
+// index), by arrow_mode (key A; the arrow's colour shows it): 0 the next
+// job (yellow), 1 the friend's house (light green), 2 the nearest paint
+// garage (light red, nearest to the player by |dx| + |dy|)
+arrow_cols: .byte 7, 13, 10
+goal_idx:
+    lda arrow_mode
+    bne !+
+    ldx target
+    rts
+!:  cmp #1
+    bne gi_paint
+    ldx #FRIEND
+    rts
+gi_paint:
+    jsr set_target
+    lda #$ff
+    sta t3                          // best distance (high byte $ff: none)
+    ldx #GARAGE0 + NGARAGE - 1
+gi_loop:
+    lda door_xl,x                   // |dx|
+    sec
+    sbc tgt_xl
+    sta t0
+    lda door_xh,x
+    sbc tgt_xh
+    bpl !+
+    eor #$ff                        // (one less than the negative: close enough)
+    sta t1
+    lda t0
+    eor #$ff
+    sta t0
+    lda t1
+!:  sta t1
+    lda door_yl,x                   // + |dy|
+    sec
+    sbc tgt_yl
+    sta t5
+    lda door_yh,x
+    sbc tgt_yh
+    bpl !+
+    eor #$ff
+    pha
+    lda t5
+    eor #$ff
+    sta t5
+    pla
+!:  tay
+    lda t0
+    clc
+    adc t5
+    sta t0
+    tya
+    adc t1
+    cmp t3                          // nearer than the best so far?
+    bcc gi_best
+    bne gi_next
+    lda t0
+    cmp t2
+    bcs gi_next
+    lda t3                          // (the same high byte)
+gi_best:
+    sta t3
+    lda t0
+    sta t2
+    stx t4
+gi_next:
+    dex
+    cpx #GARAGE0
+    bcs gi_loop
+    ldx t4
+    rts
+
 // ---------------------------------------------------------------- the friend's house
 // Stop in his driveway (CL_SAFE) with loot, in a car that is not the
 // getaway car of the last job and with no police after you: the loot is
 // safe (points), a bonus of $1,000 x level, the next level. The police
 // start gentle again (jobs = (level - 1) / 2, no wanted stars) and the job
 // timer gets 2 seconds shorter a level (at least JOB_MIN).
-// where the arrow, the marker and the map ring point (x = door_xl/...
-// index): the friend's house while you carry loot and are not in the
-// getaway car, else the next job
-goal_idx:
-    ldx target
-    lda carry_l
-    ora carry_h
-    beq !+
-    lda hot
-    bne !+
-    ldx #FRIEND
-!:  rts
-
 safe_check:
     lda state
     cmp #ST_DRIVE
@@ -1734,6 +1817,7 @@ sf_time:
     sta hud_dirty
     lda #0                          // (not the end of the game)
     sta msg_next
+    sta arrow_mode                  // the arrow: the next job again
     lda #W_SAFE
     ldx #5
     jmp show_msg

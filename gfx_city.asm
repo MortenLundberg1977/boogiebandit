@@ -645,3 +645,18 @@
 .eval mapCode.set(DRIVE, 3)
 .eval mapCode.set(DRIVE_L, 3)
 .eval mapCode.set(DRIVE_R, 3)
+
+// where the arrow can point (boogie.asm door_xl/...): the banks and card
+// shops (0-15), the friend's driveway (16), the paint garages (17-19)
+.var goalX = List()
+.var goalY = List()
+.for (var i = 0; i < bankDoorX.size(); i++) {
+    .eval goalX.add(bankDoorX.get(i))
+    .eval goalY.add(bankDoorY.get(i))
+}
+.eval goalX.add(friendX)
+.eval goalY.add(friendY)
+.for (var i = 0; i < garageX.size(); i++) {
+    .eval goalX.add(garageX.get(i))
+    .eval goalY.add(garageY.get(i))
+}

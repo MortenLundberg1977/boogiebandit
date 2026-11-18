@@ -35,10 +35,17 @@ COPS!", in the getaway car "HOT CAR!", else "SAFE! LEVEL UP!": the loot goes
 to the score plus $1,000 x `level`, `level` + 1, the wanted stars go, the
 police start gentle again (`jobs` = (level - 1) / 2, at most 6) and the job
 timer is 2 s shorter a level (at least `JOB_MIN`). Several robberies per trip
-are allowed (the police get tougher with each, as below). While loot is
-carried and the car is not hot, the arrow, the bouncing marker and the ring
-on the city map point to the friend's driveway (`goal_idx`; `door_xl/...`
-entry `FRIEND` = 16), else to the next job.
+are allowed (the police get tougher with each, as below).
+
+The arrow (lower left) and the bouncing marker point to one of three goals
+(`arrow_mode`, key A cycles it; the arrow's colour shows which, `arrow_cols`):
+0 the next job (yellow), 1 the friend's driveway (light green, `FRIEND` =
+16 in `door_xl/...`), 2 the nearest paint garage (light red, entries
+`GARAGE0` = 17-19, nearest by |dx| + |dy|). `goal_idx` in chase.asm picks
+the entry; the ring on the city map shows the same goal. It turns to the
+friend's house by itself when the car becomes clean with loot on board
+(stolen or painted, `clean_car`) and back to the next job after a delivery
+and at game start.
 
 The police get tougher with every bank robbed (`jobs`, at most 9, reset at
 the friend's house):
@@ -56,11 +63,14 @@ gently, slow down for corners, stop for a U-turn, and keep going straight
 while that still leads to the player (no zigzag).
 
 Three paint garages (yellow PAINT sign, an open spray booth facing the street
-below; small yellow marks on the city map): stop in the booth during a chase
-and after 1 second of spraying the car has a new colour (once, no flashing;
-at random from `paint_cols`, never the colour it has: `new_paint`), costs $300, and
-every police car loses the trail (`NT_LOST`: they drive on at random and
-leave), so ESCAPED! (+$500). The job timer starts at 60
+below; small yellow marks on the city map): stop in the booth (any time, not
+only in a chase) and after 1 second of spraying the car has a new colour
+(once per visit: `paint_lock` until it leaves the booth; at random from
+`paint_cols`, never the colour it has: `new_paint`), costs $300 and is not
+the getaway car any more (`clean_car`: `hot` = 0, so it may deliver at the
+friend's house; with loot on board the arrow turns to the friend's house).
+During a chase every police car loses the trail (`NT_LOST`: they drive on at
+random and leave), so ESCAPED! (+$500). The job timer starts at 60
 seconds and gets 3 seconds shorter per job (at least 30); run out: TOO SLOW!,
 a life gone, next bank.
 
@@ -120,7 +130,13 @@ position so the rest of the city stays the same; only the colours of the
 city characters are possible). Flooring it from standstill
 (burnout) and sliding at speed leave black tyre marks.
 
-Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar.
+Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar,
+A what the arrow points to.
+
+Walls: the car moves x and y separately against a square box (`bhw` 6). If
+only one way is blocked and it is not the way the car mainly goes, it
+scrapes along (speed - speed / 32 a frame); head on (or both blocked) it
+bounces back at a quarter of its speed (`dd_bumped`).
 Sound: the tune on 3 voices; while driving voice 2 is the engine (pitch from
 the speed), during a chase voice 1 is the siren; effects on voice 3 (pow,
 crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
@@ -129,7 +145,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V1.4.0" in the top right of the title
+a fix only PATCH + 1), drawn as "V1.5.0" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 
@@ -155,7 +171,7 @@ that commit `v<version>`.
   part of a screenshot. Always look at the screenshots.
 - Test hooks (zero page, check `build\boogie.sym` after changes):
   `joy_ovr` $1d (OR'ed into joystick 2: 1 up 2 down 4 left 8 right $10 fire),
-  `key_ovr` $ba (keys: $20 SPACE, $10 M, $04 D; poke, then 00 again),
+  `key_ovr` $ba (keys: $20 SPACE, $10 M, $04 D, $02 A; poke, then 00 again),
   `fps_val` $17 (frames shown in the last 50 raster frames, $32 = 50),
   `perf` $84 / `perf_max` $85 (main loop time in raster lines / 2 counted from
   the IRQ at line 250; 156 = a whole frame), `n_cross` $b8 / `n_hold` $b9
@@ -169,9 +185,9 @@ that commit `v<version>`.
   `have_car` $e8, `loot` $e9, `steal_pos` $f0, `m_speed` $f1, `m_song` $f6,
   `n_next`/`n_prev`/`n_rot` $3d3/$3d8/$3dd, `foot_col` $3e2 (`n_type` 6 = a guard on foot; `target`: 0-7 banks,
   8-15 card shops), `hot` $3e7, `carry_l`/`carry_h` $3e8/$3e9, `level` $3ea,
-  `safe_in` $3eb, `sh_gline`/`lv_gline` $f7/$f8
+  `safe_in` $3eb, `paint_lock` $3ec, `arrow_mode` $3ed, `sh_gline`/`lv_gline` $f7/$f8
   (the garage at lot (2,4): car x $0200, y $0244, heading 0, drive up into
-  the booth; the friend's driveway: `poke 3e8 21; poke 3e7 00`, car x $002c,
+  the booth, or put it in: x $0200, y $021c; the friend's driveway: `poke 3e8 21; poke 3e7 00`, car x $002c,
   y $03c4 heading 0, wait 3 s, then `poke 1d 01` 0.6 s, release 0.3 s,
   `poke 1d 02` 0.2 s: it stops in the driveway),
   `car_xl`/`car_yl` $24/$27 (+1 high byte), `hdg`/`mang` $2a/$2b, `debug_bar` $1f.
@@ -205,7 +221,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7cxx` program + data (must stay below $8000; ~0.9 KB free). After it
+- `$0801-$7cxx` program + data (must stay below $8000; ~0.6 KB free). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.
