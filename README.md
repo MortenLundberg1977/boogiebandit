@@ -7,6 +7,12 @@ a 70s sedan through a big smooth-scrolling New York, pull the job at the bank th
 arrow points to (KAPOW! ZOWIE! KACHING!), shake off the police, change cars or
 get a new paint job, and bring the loot to your friend's house in the suburb.
 
+**Download:** [boogiebandit.d64](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogiebandit.d64)
+(disk image, `LOAD"BOOGIE",8` then `RUN`),
+[boogiebandit.t64](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogiebandit.t64) (tape image) or
+[boogie.prg](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogie.prg),
+the latest version; older ones on the [Releases](https://github.com/MortenLundberg1977/boogiebandit/releases) page.
+
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
 ![Officer shooting](screenshots/16_officer_shooting.png) ![Paint garage](screenshots/15_paint_garage.png)
