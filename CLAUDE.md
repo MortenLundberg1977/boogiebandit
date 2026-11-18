@@ -14,7 +14,7 @@ the game's own fonts in `gfx_lib.asm`), black tyre marks.
 
 Drive the red sedan through a scrolling 128 x 128 character city to the bank
 the arrow (lower left) points at; a green marker bounces over its door. Fire
-(when nearly stopped) gets out; walk into the door: a 6.7 second robbery with
+(when nearly stopped) gets out; walk into the door: a 4 second robbery with
 comic bubbles (KAPOW!, BLAM!, ...), five per robbery, random word and colour.
 The bandit comes out with a loot bag ($1,000-$4,700; 10 x the seconds left
 on the job timer go to the score at once), the next bank is chosen (target + 3
@@ -146,7 +146,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V1.5.1" in the top right of the title
+a fix only PATCH + 1), drawn as "V1.5.2" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 
