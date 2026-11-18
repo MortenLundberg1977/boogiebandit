@@ -595,7 +595,7 @@ sm_crow:                            // the map cells
     sta t4
     jsr mm_spr
     // the next bank
-    ldx target
+    jsr goal_idx
     lda door_xl,x
     sta px_l
     lda door_xh,x

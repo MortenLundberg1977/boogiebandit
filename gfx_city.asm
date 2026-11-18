@@ -12,6 +12,7 @@
 .const CL_SOLID = 3
 .const CL_DOOR = 7              // 4 = bank door
 .const CL_PAINT = 8             // the spray booth of a paint garage (drivable)
+.const SUB_ROW = 107            // the suburb: map rows 107-127 (see "the suburb")
 
 .var chars = List()
 .var charKeys = Hashtable()
@@ -179,7 +180,12 @@
 .var parkedCars = List().add(cabV, carW, cabV, carB, carW, carS, cabV, carB)
 // which car stands at (x, y): from the position, so no extra random calls
 // (the rest of the city stays the same)
-.function parked(x, y) { .return parkedCars.get(mod(x * 5 + y * 3 + floor(y / 7), parkedCars.size())) }
+.function parked(x, y) {
+    .var i = mod(x * 5 + y * 3 + floor(y / 7), parkedCars.size())
+    .if (y >= SUB_ROW && (i == 1 || i == 4)) .return carB     // (a white car would be green there)
+    .var car = parkedCars.get(i)
+    .return car
+}
 // for stealing them: the kinds (colour of the stolen car in boogie.asm,
 // kind_col) and per character $80 + kind * 8 + row * 2 + column, else 0
 .var carKinds = List().add(cabV, carW, carB, carS)
@@ -195,6 +201,69 @@
         }
     }
 }
+
+// ---------------------------------------------------------------- the suburb
+// The south edge of the map (rows SUB_ROW-127) is the outskirts: lawns,
+// houses, trees and the friend's house. A raster split (boogie.asm) turns
+// $d022 green from that row down, so there "w" is grass. City characters
+// placed there that have "w" pixels get a copy without them (subVariant).
+
+.const CL_SAFE = 16             // the friend's driveway (drivable)
+.var subChars = Hashtable()     // characters made for the suburb (keep their "w")
+.function subStamp(rows, cls) {
+    .var st = stamp(rows, cls)
+    .for (var y = 0; y < st.size(); y++) .for (var x = 0; x < st.get(0).size(); x++) .eval subChars.put("" + st.get(y).get(x), true)
+    .return st
+}
+// a hipped roof seen from above, w x h characters, on a 1 pixel lawn border:
+// faces f (north/south) and s (east/west), hips and ridge in l, eaves in e
+.function roofArt(wc, hc, f, s, l, e) {
+    .var W = wc * 4
+    .var H = hc * 8
+    .var rows = List()
+    .for (var y = 0; y < H; y++) {
+        .var str = ""
+        .for (var x = 0; x < W; x++) {
+            .var c = "w"
+            .if (x >= 1 && x <= W - 2 && y >= 1 && y <= H - 2) {
+                .var ax = min(x - 1, W - 2 - x) * 2
+                .var ay = min(y - 1, H - 2 - y)
+                .eval c = (ax < ay) ? s : f
+                .if (abs(ax - ay) <= 1) .eval c = l
+                .if (ax > ay && (y == floor(H / 2) - 1 || y == floor(H / 2))) .eval c = l
+                .if (ax > ay && c == f && mod(y, 3) == 0 && mod(x, 2) == 0 && f == "b") .eval c = "."
+                .if (x == 1 || x == W - 2 || y == 1 || y == H - 2) .eval c = e
+            }
+            .eval str = str + c
+        }
+        .eval rows.add(str)
+    }
+    .return rows
+}
+.var houseA = subStamp(roofArt(4, 4, "b", "b", ".", "b"), CL_SOLID)
+.var houseB = subStamp(roofArt(5, 4, "b", "b", ".", "b"), CL_SOLID)
+.var friendHouse = subStamp(roofArt(6, 4, "y", "y", "b", "b"), CL_SOLID)
+// the friend's driveway: grey with a white-ish (green) edge, drivable
+.var DRIVE = subStamp(List().add("....", "....", "....", "....", "....", "....", "....", "...."), CL_SAFE).get(0).get(0)
+.var DRIVE_L = subStamp(List().add("w...", "w...", "w...", "w...", "w...", "w...", "w...", "w..."), CL_SAFE).get(0).get(0)
+.var DRIVE_R = subStamp(List().add("...w", "...w", "...w", "...w", "...w", "...w", "...w", "...w"), CL_SAFE).get(0).get(0)
+// a tree (2 x 2): a dark round crown with green leaves showing through
+.var treeArt = List()
+.for (var y = 0; y < 16; y++) {
+    .var s = ""
+    .for (var x = 0; x < 8; x++) {
+        .var dx = x * 2 + 1 - 8
+        .var dy = y + 0.5 - 8
+        .var d = sqrt(dx * dx + dy * dy)
+        .var c = "w"
+        .if (d < 7.4) .eval c = "b"
+        .if (d < 6 && mod(x + y * 3, 5) == 0) .eval c = "w"
+        .eval s = s + c
+    }
+    .eval treeArt.add(s)
+}
+.var TREE = subStamp(treeArt, CL_SOLID)
+.var HEDGE = subStamp(List().add("wbwb", "bbbb", "bwbb", "bbbb", "bbwb", "bbbb", "wbbw", "wwww"), CL_SOLID).get(0).get(0)
 
 // ---------------------------------------------------------------- the map
 .const MW = 128
@@ -272,7 +341,22 @@
 .var LY0 = List().add(2, 11, 27, 43, 59, 75, 91, 107, 123)    // after a street and its crosswalk
 .var LY1 = List().add(5, 21, 37, 53, 69, 85, 101, 117, 125)
 
+// houses with lawns and trees instead of city blocks (in the suburb)
+.function houses(bx0, by0, bw, bh) {
+    .eval mfill(bx0, by0, bw, bh, WALK)
+    .if (bh < 4) .return mfill(bx0, by0 + bh - 1, bw, 1, HEDGE)     // backyards: a hedge
+    .var x = bx0
+    .while (x + 4 <= bx0 + bw) {
+        .var big = (x + 5 <= bx0 + bw) && rnd(2) == 0
+        .eval mstamp(x, by0, big ? houseB : houseA)
+        .if (bh >= 7 && rnd(3) != 0) .eval mstamp(x + 1 + rnd(2), by0 + bh - 2, TREE)
+        .eval x = x + (big ? 5 : 4) + rnd(2)
+    }
+    .return 0
+}
+
 .function buildings(bx0, by0, bw, bh) {
+    .if (by0 >= SUB_ROW) .return houses(bx0, by0, bw, bh)
     .var x = bx0
     .while (x < bx0 + bw) {
         .var w = 4 + rnd(4)
@@ -295,6 +379,10 @@
 // card shops (robbed like banks: targets 8-15, smaller loot)
 .var cardLots = List().add(List().add(2, 1), List().add(1, 3), List().add(3, 5), List().add(2, 7),
                            List().add(2, 2), List().add(3, 3), List().add(1, 5), List().add(2, 5))
+.const FRIEND_LOT_X = 0          // the friend's house: lot (0, 7), in the suburb
+.const FRIEND_LOT_Y = 7
+.var friendX = 0                 // the middle of his driveway, world pixels
+.var friendY = 0
 .var garageX = List()            // middle of the spray booth, world pixels
 .var garageY = List()
 .function isLot(list, kx, ky) {
@@ -327,6 +415,19 @@
         .var p = isLot(parkLots, kx, ky)
         .var g = isLot(garageLots, kx, ky)
         .var cs = isLot(cardLots, kx, ky)
+        .if (kx == FRIEND_LOT_X && ky == FRIEND_LOT_Y) {
+            // the friend's house: yellow roof, a driveway down to the street
+            .eval mfill(bx0, by0, bw, bh + 2, WALK)
+            .eval mstamp(bx0 + 1, by0, friendHouse)
+            .for (var y = by0 + 4; y <= by1 + 2; y++) {
+                .eval mset(bx0 + 2, y, DRIVE_L)
+                .eval mset(bx0 + 3, y, DRIVE)
+                .eval mset(bx0 + 4, y, DRIVE_R)
+            }
+            .eval mstamp(bx0 + bw - 2, by0 + 4, TREE)
+            .eval friendX = (bx0 + 3) * 8 + 4
+            .eval friendY = (by1 + 1) * 8
+        } else {
         .if (b >= 0) {
             .var bankx = bx0 + floor((bw - 10) / 2)
             .eval buildings(bx0, by0, bankx - bx0, bh)
@@ -376,6 +477,7 @@
         }
         }
         }
+        }
     }
 }
 
@@ -396,6 +498,46 @@
     .if (mget(x, y) == ROADCH && mget(x + 1, y) == ROADCH) .eval mstamp(x, y, MANHOLE)
 }
 
+// the suburb rows: city characters there lose their "w" pixels (green
+// there): road markings and the card shop's white turn yellow, the rest grey
+.var subKeep = Hashtable()
+.eval subKeep.put("" + WALK, true)
+.eval subKeep.put("" + WALK2, true)
+.eval subKeep.put("" + HYDRANT, true)
+.for (var c = 0; c < parkedCars.size(); c++) .for (var y = 0; y < 3; y++) .for (var x = 0; x < 2; x++) .eval subKeep.put("" + parkedCars.get(c).get(y).get(x), true)
+.var subYellow = Hashtable()
+.eval subYellow.put("" + STDASH, true)
+.eval subYellow.put("" + ZEB_H, true)
+.eval subYellow.put("" + ZEB_V, true)
+.for (var x = 0; x < 5; x++) .eval subYellow.put("" + CARDWORD.get(0).get(x), true)
+.for (var y = 0; y < 2; y++) .for (var x = 0; x < 2; x++) .eval subYellow.put("" + cardSign.get(y).get(x), true)
+.var subMap = Hashtable()
+.function subVariant(c) {
+    .var key = "" + c
+    .if (subChars.containsKey(key) || subKeep.containsKey(key)) .return c
+    .if (subMap.containsKey(key)) .return subMap.get(key)
+    .var to = subYellow.containsKey(key) ? 3 : 0
+    .var src = chars.get(c)
+    .var nb = List()
+    .var changed = false
+    .for (var i = 0; i < 8; i++) {
+        .var v = 0
+        .for (var p = 0; p < 4; p++) {
+            .var px = (src.get(i) >> (6 - 2 * p)) & 3
+            .if (px == 1) {
+                .eval px = to
+                .eval changed = true
+            }
+            .eval v = v * 4 + px
+        }
+        .eval nb.add(v)
+    }
+    .var n = changed ? addChar(nb, charClass.get(c)) : c
+    .eval subMap.put(key, n)
+    .return n
+}
+.for (var y = SUB_ROW; y < MH; y++) .for (var x = 0; x < MW; x++) .eval mset(x, y, subVariant(mget(x, y)))
+
 .var CITY_CHARS = chars.size()
 
 // ---------------------------------------------------------------- comic bubbles
@@ -414,7 +556,8 @@
 
 .var bubbleWords = List().add("KAPOW!", "BLAM!", "ZOWIE!", "WHAM!", "BOOM!", "POW!", "BANG!", "ZAP!",
                               "CRASH!", "BAM!", "SWAG!", "YOINK!", "LOOT!", "CASH!", "KABOOM!", "KACHING!",
-                              "BUSTED!", "ESCAPED!", "TOO SLOW!")   // 16-18: messages
+                              "BUSTED!", "ESCAPED!", "TOO SLOW!",   // 16-18: messages
+                              "SAFE! LEVEL UP!", "HOT CAR!", "LOSE THE COPS!")   // 19-21: at the friend's house
 .var glyphOrder = ""
 .for (var w = 0; w < bubbleWords.size(); w++) {
     .var s = bubbleWords.get(w)
@@ -497,3 +640,8 @@
 // paint garages show yellow on the map: the sign and the booth
 .for (var x = 0; x < 5; x++) .eval mapCode.set(PAINTWORD.get(0).get(x), 3)
 .for (var y = 0; y < 3; y++) .for (var x = 0; x < 4; x++) .eval mapCode.set(paintBay.get(y).get(x), 3)
+// the friend's house shows yellow on the map too
+.for (var y = 0; y < 4; y++) .for (var x = 0; x < 6; x++) .eval mapCode.set(friendHouse.get(y).get(x), 3)
+.eval mapCode.set(DRIVE, 3)
+.eval mapCode.set(DRIVE_L, 3)
+.eval mapCode.set(DRIVE_R, 3)

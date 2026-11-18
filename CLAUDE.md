@@ -16,14 +16,32 @@ Drive the red sedan through a scrolling 128 x 128 character city to the bank
 the arrow (lower left) points at; a green marker bounces over its door. Fire
 (when nearly stopped) gets out; walk into the door: a 6.7 second robbery with
 comic bubbles (KAPOW!, BLAM!, ...), five per robbery, random word and colour.
-The bandit comes out with a loot bag ($1,000-$4,700 plus 10 x the seconds left
-on the job timer), the next bank is chosen (target + 3 of 8), one more wanted
+The bandit comes out with a loot bag ($1,000-$4,700; 10 x the seconds left
+on the job timer go to the score at once), the next bank is chosen (target + 3
+of 16), one more wanted
 star lights up (at most 3) and that many police cars come after him. Fire next
 to the car gets back in. Lose every police car (they give up 2-3 screens
 away): ESCAPED!, $500. Touched by one (car to car, or within 32 pixels on
 foot): BUSTED!, a life gone, the stars reset.
 
-The police get tougher with every bank robbed this game (`jobs`, at most 9):
+The loot is only carried (`carry_l`/`carry_h`, BCD hundreds / ten thousands)
+until it reaches the friend's house; BUSTED! loses all of it. The car outside
+a robbery becomes the getaway car (`hot` = 1); a stolen car is clean (`hot` =
+0). The friend's house is in the suburb (lot (0, 7), `FRIEND_LOT_X/Y` in
+gfx_city.asm): a yellow roof (yellow on the city map) and a driveway down to
+the street (characters of class `CL_SAFE` = 16). Stop in the driveway with
+loot (`safe_check` in chase.asm, once each time in): during a chase "LOSE THE
+COPS!", in the getaway car "HOT CAR!", else "SAFE! LEVEL UP!": the loot goes
+to the score plus $1,000 x `level`, `level` + 1, the wanted stars go, the
+police start gentle again (`jobs` = (level - 1) / 2, at most 6) and the job
+timer is 2 s shorter a level (at least `JOB_MIN`). Several robberies per trip
+are allowed (the police get tougher with each, as below). While loot is
+carried and the car is not hot, the arrow, the bouncing marker and the ring
+on the city map point to the friend's driveway (`goal_idx`; `door_xl/...`
+entry `FRIEND` = 16), else to the next job.
+
+The police get tougher with every bank robbed (`jobs`, at most 9, reset at
+the friend's house):
 speed 1.75 pixels a frame on the first chase, +0.19 per job, at most 2.7 (the
 car does 3). From the 2nd robbery on a police car near the player (on screen,
 32-120 pixels away) stops and the officer gets out (blue, slot 3 / sprite 2,
@@ -111,7 +129,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V1.3.0" in the top right of the title
+a fix only PATCH + 1), drawn as "V1.4.0" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 
@@ -150,9 +168,12 @@ that commit `v<version>`.
   for shooting and roadblocks), `officer` $d7, `bul_t` $da, `car_col` $e1,
   `have_car` $e8, `loot` $e9, `steal_pos` $f0, `m_speed` $f1, `m_song` $f6,
   `n_next`/`n_prev`/`n_rot` $3d3/$3d8/$3dd, `foot_col` $3e2 (`n_type` 6 = a guard on foot; `target`: 0-7 banks,
-  8-15 card shops)
+  8-15 card shops), `hot` $3e7, `carry_l`/`carry_h` $3e8/$3e9, `level` $3ea,
+  `safe_in` $3eb, `sh_gline`/`lv_gline` $f7/$f8
   (the garage at lot (2,4): car x $0200, y $0244, heading 0, drive up into
-  the booth),
+  the booth; the friend's driveway: `poke 3e8 21; poke 3e7 00`, car x $002c,
+  y $03c4 heading 0, wait 3 s, then `poke 1d 01` 0.6 s, release 0.3 s,
+  `poke 1d 02` 0.2 s: it stops in the driveway),
   `car_xl`/`car_yl` $24/$27 (+1 high byte), `hdg`/`mang` $2a/$2b, `debug_bar` $1f.
   Teleport next to bank 0: `poke 24 00 01; poke 27 c4 00; poke 2a c0 c0`, then
   fire, `poke 1d 01` for 1.2 s walks into the door. Poke `wanted` to 2 during
@@ -184,7 +205,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$79xx` program + data (must stay below $8000; ~1.7 KB free). After it
+- `$0801-$7cxx` program + data (must stay below $8000; ~0.9 KB free). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city map, 128 x 128 characters, unpacked at start-up.
@@ -197,11 +218,11 @@ into characters and de-duplicated.
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
   packed map (`map_rle`, free after unpacking; must stay ≥ 6001 bytes, an
-  assert checks this), and the 2,790 bytes of tables after it (`sin_tab` to
+  assert checks this), and the 2,554 bytes of tables after it (`sin_tab` to
   `steal_kind`: `tail_src` in the start-up data, assembled for `TAIL` =
   `map_rle` + 6001, parked at $e000 during start-up and copied there once
-  the map is unpacked; `TAIL_PAGES`; only 12 bytes to spare before the title
-  picture data, asserts check it: new tables go in the program), B→A at `$e000`, generated again every time the city
+  the map is unpacked; `TAIL_PAGES`; about 120 bytes to spare before the title (it depends on the packed map;
+  the comic bubble words were moved back into the program for that), asserts check it: new tables go in the program), B→A at `$e000`, generated again every time the city
   comes back from a bitmap screen (`gen_shift_ba`).
 - KERNAL and BASIC are banked out (`$01=$35`), IRQ/NMI vectors at `$fffe/$fffa`.
 - Zero page `$02-$bx` is the game's (allocated with `zalloc`).
@@ -232,7 +253,19 @@ Heavy frames (`scrolled`) skip the HUD redraw and the engine sound update.
 
 Colour RAM is one value for the whole city (multicolor, yellow), so it never
 has to scroll; the palette is `$d021` grey asphalt, `$d022` light grey,
-`$d023` black (roofs, tyre marks), colour RAM yellow. Comic bubbles are drawn
+`$d023` black (roofs, tyre marks), colour RAM yellow. The suburb (map rows
+`SUB_ROW` = 107 to 127) has green grass instead of the light grey: a third
+raster IRQ (`irq_green`, chained after `irq_split` when the suburb is on
+screen) sets `$d022` to `LAWN_COL` on the last line of row 106 (no "w" pixels
+there), and the IRQ at line 250 sets it grey again. The line is
+`GREEN_BASE` (55) + 107 * 8 - camera y, prepared in `scroll_regs`
+(`sh_gline`, 0 = not on screen) and taken with the frame (`lv_gline`); at
+the very bottom of the map (line < 84) `irq_split` sets it at once. City
+characters in the suburb rows lose their "w" pixels at build time
+(`subVariant` in gfx_city.asm: road markings and the card shop's white turn
+yellow, the rest grey); suburb art (`subStamp`: houses with hipped roofs,
+trees, hedges, the friend's house and driveway) and lawns (`WALK`) keep it.
+White parked cars are black there. Only 8 of 256 characters are left. Comic bubbles are drawn
 into the shown screen with their own colour RAM while the camera stands still,
 and the city is restored from the map afterwards.
 
@@ -264,6 +297,6 @@ officer shooting and a roadblock ≈ $83.
 ## Ideas on the list
 
 More banks and a second district; a minimap in the HUD
-(the full map is on SPACE); saving the high scores to disk; a park or river
-would need green/blue, which the one-colour-RAM city can't show (it would need
-colour RAM scrolling, ~8,000 more cycles a scroll).
+(the full map is on SPACE); saving the high scores to disk. A park or river
+needs green/blue like the suburb: only as a horizontal band (a raster split
+like `irq_green`), since colour RAM is one value for the whole city.

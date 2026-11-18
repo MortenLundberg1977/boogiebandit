@@ -1585,28 +1585,158 @@ impound:
     sta paint_t
     lda #ST_WALK
     sta state
-    lda bag
-    beq im_rts
+    lda #0                          // all the loot not yet at the friend's
+    sta bag                         // house is gone
+    sta carry_l
+    sta carry_h
+    rts
+
+// ---------------------------------------------------------------- the friend's house
+// Stop in his driveway (CL_SAFE) with loot, in a car that is not the
+// getaway car of the last job and with no police after you: the loot is
+// safe (points), a bonus of $1,000 x level, the next level. The police
+// start gentle again (jobs = (level - 1) / 2, no wanted stars) and the job
+// timer gets 2 seconds shorter a level (at least JOB_MIN).
+// where the arrow, the marker and the map ring point (x = door_xl/...
+// index): the friend's house while you carry loot and are not in the
+// getaway car, else the next job
+goal_idx:
+    ldx target
+    lda carry_l
+    ora carry_h
+    beq !+
+    lda hot
+    bne !+
+    ldx #FRIEND
+!:  rts
+
+safe_check:
+    lda state
+    cmp #ST_DRIVE
+    bne sf_out
+    lda car_yl                      // the map character under the car
+    sta t0
+    lda car_yh
+    lsr
+    ror t0
+    lsr
+    ror t0
+    lsr
+    ror t0
+    ldx t0
+    lda mrow_lo,x
+    sta zp0
+    lda mrow_hi,x
+    sta zp0 + 1
+    lda car_xl
+    sta t0
+    lda car_xh
+    lsr
+    ror t0
+    lsr
+    ror t0
+    lsr
+    ror t0
+    ldy t0
+    lda (zp0),y
+    tax
+    lda class_tab,x
+    and #CL_SAFE
+    beq sf_out
+    jsr abs_speed                   // stopped there
+    lda t1
+    bne sf_rts
+    lda t0
+    cmp #$20
+    bcs sf_rts
+    lda safe_in                     // once each time
+    bne sf_rts
+    inc safe_in
+    lda carry_l                     // nothing to bring: just a visit
+    ora carry_h
+    beq sf_rts
+    lda chase
+    beq !+
     lda #0
-    sta bag
-    sed
-    sec
+    sta msg_next
+    lda #W_COPS                     // not with the police after you
+    ldx #7
+    jmp show_msg
+!:  lda hot
+    beq sf_deliver
+    lda #0
+    sta msg_next
+    lda #W_HOT                      // not in the getaway car
+    ldx #7
+    jmp show_msg
+sf_out:
+    lda #0
+    sta safe_in
+sf_rts:
+    rts
+sf_deliver:
+    sed                             // the loot is safe: points
+    clc
     lda score + 1
-    sbc loot
+    adc carry_l
     sta score + 1
     lda score + 2
-    sbc #0
+    adc carry_h
     sta score + 2
-    cld
-    bcs !+
-    lda #0
-    sta score
+    ldx level                       // + $1,000 a level
+!:  clc
+    lda score + 1
+    adc #$10
     sta score + 1
+    lda score + 2
+    adc #0
     sta score + 2
-!:  lda #1
+    dex
+    bne !-
+    cld
+    lda #0
+    sta carry_l
+    sta carry_h
+    sta bag
+    sta wanted
+    lda level                       // the next level
+    cmp #99
+    bcs !+
+    inc level
+!:  lda level                       // the police start gentle again
+    sec
+    sbc #1
+    lsr
+    cmp #6
+    bcc !+
+    lda #6
+!:  sta jobs
+    lda #JOB_TIME                   // the job timer: 2 s less a level (BCD)
+    ldx level
+    sed
+sf_time:
+    dex
+    beq !+
+    cmp #JOB_MIN + 2
+    bcc !+
+    sec
+    sbc #2
+    jmp sf_time
+!:  cld
+    sta job_start
+    sta job_time
+    lda #50
+    sta job_tick
+    lda #1
     sta score_dirty
-im_rts:
-    rts
+    lda hud_dirty
+    ora #3
+    sta hud_dirty
+    lda #0                          // (not the end of the game)
+    sta msg_next
+    lda #W_SAFE
+    ldx #5
+    jmp show_msg
 
 // msg_next = 1 if that was the last life
 last_life:

@@ -13,7 +13,7 @@ top right corner of the title picture.
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
 ![Officer shooting](screenshots/16_officer_shooting.png) ![Paint garage](screenshots/15_paint_garage.png)
-![Guard on foot](screenshots/20_guard.png)
+![Guard on foot](screenshots/20_guard.png) ![Friend's house](screenshots/21_friends_house.png)
 
 ## How to play
 
@@ -27,8 +27,16 @@ top right corner of the title picture.
   Lose them all and you get a $500 bonus. If one catches you, you're BUSTED!
 - Rob banks and card shops (CARDS sign with a playing card; a smaller take
   of $200-$900). The first target is different each game.
-- If one catches you, you're BUSTED!: the police keep your car and the loot
-  of the last job, and you go on on foot.
+- The loot only counts once it is at your friend's house, out in the green
+  suburb at the south end of town (the yellow roof, bottom left; yellow on the
+  city map). Stop in his driveway, but not in the getaway car (steal another
+  one first) and not with the police after you: SAFE! LEVEL UP! The loot goes
+  to your score with a $1,000 x level bonus, and the police start gentle
+  again. You can do several jobs before you go there, but the police get
+  tougher with each one. While you carry loot in a clean car, the arrow
+  points to your friend's house.
+- If one catches you, you're BUSTED!: the police keep your car and all the
+  loot you carry, and you go on on foot.
 - Steal a parked car: walk up to one and press fire. During a chase, the
   police only notice if one of them is very close; otherwise they lose your
   trail. Stolen cars are back in their spots next game.

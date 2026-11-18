@@ -20,6 +20,8 @@
 // ---------------------------------------------------------------- constants
 .const ROAD_COL = 12            // $d021 asphalt (grey)
 .const WALK_COL = 15            // $d022 sidewalks (light grey)
+.const LAWN_COL = 5             // $d022 in the suburb: grass (green)
+.const GREEN_BASE = 55           // raster line of world y = cam_y (row 0 of the screen at fine y 0)
 .const ROOF_COL = 0             // $d023 roofs, tyre marks (black)
 .const HI_COL = 7               // color RAM: yellow cabs, lines, windows
 .const COLRAM = $08 | HI_COL    // multicolor + yellow for every cell
@@ -35,7 +37,7 @@
 .const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
 .const SP_GUARD = 236             // + dir*2 + step
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
-.const TAIL_PAGES = 11            // the tables moved out of the program (see tail_src)
+.const TAIL_PAGES = 10            // the tables moved out of the program (see tail_src)
 .const TEMP = $e000               // where they wait during start-up
 .const MAP = $8000
 .const D018_A = $04             // screen $c000, chars $d000
@@ -95,6 +97,10 @@
 .const W_BUSTED = 16             // message words (gfx_city.asm)
 .const W_ESCAPED = 17
 .const W_SLOW = 18
+.const W_SAFE = 19
+.const W_HOT = 20
+.const W_COPS = 21
+.const FRIEND = NBANKS            // door_xl/... index of the friend's driveway
 .const SPLIT_LINE = 80           // the HUD sprites end at line 76
 .const SPLIT_MIN_Y = 88          // shared sprites only below the HUD row
 .const JOB_TIME = $60            // seconds (BCD) for the first job
@@ -334,6 +340,8 @@
 .label va = zalloc(1)
 .label vb = zalloc(1)
 .label m_song = zalloc(1)         // music: 0 the tune, 1 the chase tune
+.label sh_gline = zalloc(1)       // the suburb: raster line before its first row
+.label lv_gline = zalloc(1)       // (0: not on screen), prepared / shown
 .errorif zpNext > $100, "zero page full"
 .errorif car_yh - car_xf != 5, "car_xf..car_yh must be in a row (save_car)"
 
@@ -386,6 +394,11 @@
 .label foot_anim = balloc(1)
 .label foot_wall = balloc(1)       // steps still to follow a wall, and along which
 .label foot_axis = balloc(1)       // axis (0: the wall blocks x, he slides in y)
+.label hot = balloc(1)             // 1: the car is the getaway car of the last job
+.label carry_l = balloc(1)         // loot not yet at the friend's house (BCD: hundreds,
+.label carry_h = balloc(1)         // ten thousands)
+.label level = balloc(1)           // 1, 2, ... (one more for each delivery)
+.label safe_in = balloc(1)         // 1 while the car stands in the friend's driveway
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -644,6 +657,8 @@ irq:
     sta $d016
     lda sh_d011
     sta $d011
+    lda sh_gline
+    sta lv_gline
     lda in_game
     bne !+
     jmp irq_taken
@@ -762,6 +777,8 @@ irq_noframe:
     lda #>irq_split
     sta $ffff
 irq_common:
+    lda #WALK_COL                   // sidewalks grey at the top of the screen
+    sta $d022
     inc vbl
     dec fps_tick
     bne !+
@@ -843,7 +860,39 @@ irq_split:
     sta $d01d
     lda lv_yexp
     sta $d017
+    // the suburb on screen: grass from its first row down (irq_green)
+    lda lv_gline
+    beq is_done
+    cmp #SPLIT_LINE + 4             // (already: green right away)
+    bcs !+
+    lda #LAWN_COL
+    sta $d022
+    jmp is_done
+!:  sta $d012
+    lda #<irq_green
+    sta $fffe
+    lda #>irq_green
+    sta $ffff
+    pla
+    rti
 is_done:
+    lda #IRQ_LINE
+    sta $d012
+    lda #<irq
+    sta $fffe
+    lda #>irq
+    sta $ffff
+    pla
+    rti
+
+// The last raster line of the row above the suburb (no "w" pixels there):
+// $d022 becomes grass green; the IRQ at line 250 sets it grey again.
+irq_green:
+    pha
+    lda #LAWN_COL
+    sta $d022
+    lda #$ff
+    sta $d019
     lda #IRQ_LINE
     sta $d012
     lda #<irq
@@ -1122,6 +1171,10 @@ gs_ring:
     sta target
     sta bub_on
     sta bag
+    sta hot
+    sta carry_l
+    sta carry_h
+    sta safe_in
     sta ring_pos
     sta frame_ready
     sta wanted
@@ -1137,6 +1190,9 @@ gs_ring:
     sta car_col_i
     sta steal_pos
     sta st_scr                      // the cars stolen last game are back
+    lda #1                          // level 1
+    sta level
+    lda #0
     ldx #NSTEAL - 1                 // (in the map only: it is drawn later)
 gs_steal:
     lda steal_kind,x
@@ -1261,7 +1317,11 @@ game_loop:
     jsr save_car
     jsr do_drive
     jsr paint_check
-    jmp gl_world
+    jsr safe_check
+    lda state                       // a message at the friend's house: the
+    cmp #ST_MSG                     // picture stands still under the bubble
+    bne gl_world
+    jmp gl_sprites
 !:  cmp #ST_WALK
     bne !+
     jsr do_walk
@@ -1337,6 +1397,14 @@ gen_shift_ba:
     sta t3
     jmp gen_shift
 
+// the comic bubble words and their glyphs (in the program: they grow with new messages)
+word_start: .fill wordStart.size(), wordStart.get(i)
+word_len:   .fill wordLen.size(), wordLen.get(i)
+word_glyphs: .fill wordGlyphs.size(), wordGlyphs.get(i)
+gl_tl:      .fill glTL.size(), glTL.get(i)
+gl_tr:      .fill glTR.size(), glTR.get(i)
+gl_bl:      .fill glBL.size(), glBL.get(i)
+gl_br:      .fill glBR.size(), glBR.get(i)
 // the guard sprites (8, copied to GUARDSPR by gen_shift_ba)
 guard_spr:  .fill guardSpr.size(), guardSpr.get(i)
 .errorif guardSpr.size() != 512, "the guard is 8 sprites"
@@ -2456,6 +2524,7 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     sta vy_h
     sta burn
     sta paint_t
+    sta hot                         // a clean car: not the getaway car
     lda #1
     sta have_car
     lda #ST_DRIVE
@@ -2656,17 +2725,17 @@ er_bank:
     and #$07
     ora t0
 er_loot:
-    sta loot
-    sed
+    sta loot                        // carried until it is at the friend's
+    sed                             // house (points only then)
     clc
-    adc score + 1
-    sta score + 1
-    lda score + 2
+    adc carry_l
+    sta carry_l
+    lda carry_h
     adc #0
-    sta score + 2
+    sta carry_h
     cld
-    lda #1
-    sta score_dirty
+    lda #1                          // the car outside is the getaway car now
+    sta hot
     lda #SFX_CHING
     jsr sfx_play
     lda target
@@ -3152,6 +3221,23 @@ scroll_regs:
     and #7
     eor #$17                        // screen on, 24 rows, yscroll = 7 - fine y
     sta sh_d011
+    // world y w is shown on raster line GREEN_BASE + w - cam_y: the suburb
+    // (row SUB_ROW) starts at line GREEN_BASE + SUB_ROW * 8 - cam_y
+    lda #<(GREEN_BASE + SUB_ROW * 8)
+    sec
+    sbc cam_yl
+    tax
+    lda #>(GREEN_BASE + SUB_ROW * 8)
+    sbc cam_yh
+    bne sr_none                     // below the screen
+    cpx #IRQ_LINE
+    bcs sr_none
+    dex                             // the line before it
+    stx sh_gline
+    rts
+sr_none:
+    lda #0
+    sta sh_gline
     rts
 
 // If the camera crossed a character boundary, build the next picture in the
@@ -3713,7 +3799,7 @@ ps_mark:
     lda pstate
     cmp #ST_ROB
     beq ps_arrow
-    ldx target
+    jsr goal_idx
     lda door_xl,x
     sta px_l
     lda door_xh,x
@@ -3764,7 +3850,7 @@ ps_arrow:
     lda car_yh
     sta py_h
 pa_go:
-    ldx target
+    jsr goal_idx
     lda door_xl,x
     sec
     sbc px_l
@@ -4156,21 +4242,14 @@ wheel_rx:   .fill 16, (wheelRX.get(i) + 256) & 255
 wheel_ry:   .fill 16, (wheelRY.get(i) + 256) & 255
 exit_dx:    .fill 16, (round(cos(i * PI / 8) * 15) + 256) & 255
 exit_dy:    .fill 16, (round(sin(i * PI / 8) * 15) + 256) & 255
-door_xl:    .fill NBANKS, <bankDoorX.get(i)
-door_xh:    .fill NBANKS, >bankDoorX.get(i)
-door_yl:    .fill NBANKS, <bankDoorY.get(i)
-door_yh:    .fill NBANKS, >bankDoorY.get(i)
+door_xl:    .fill NBANKS + 1, (i < NBANKS) ? <bankDoorX.get(i) : <friendX
+door_xh:    .fill NBANKS + 1, (i < NBANKS) ? >bankDoorX.get(i) : >friendX
+door_yl:    .fill NBANKS + 1, (i < NBANKS) ? <bankDoorY.get(i) : <friendY
+door_yh:    .fill NBANKS + 1, (i < NBANKS) ? >bankDoorY.get(i) : >friendY
 digit_rows: .fill digitRows.size(), digitRows.get(i)
 bubble_cols: .byte 7, 1, 3, 5
 bubble_dx:  .byte 256 - 6, 5, 256 - 2, 6, 0
 bubble_dy:  .byte 256 - 8, 256 - 10, 256 - 12, 256 - 9, 256 - 11
-word_start: .fill wordStart.size(), wordStart.get(i)
-word_len:   .fill wordLen.size(), wordLen.get(i)
-word_glyphs: .fill wordGlyphs.size(), wordGlyphs.get(i)
-gl_tl:      .fill glTL.size(), glTL.get(i)
-gl_tr:      .fill glTR.size(), glTR.get(i)
-gl_bl:      .fill glBL.size(), glBL.get(i)
-gl_br:      .fill glBR.size(), glBR.get(i)
 sqr_lo:     .fill 512, <floor(i * i / 4)
 sqr_hi:     .fill 512, >floor(i * i / 4)
 park_tab:   .fill 256, parkInfo.get(i)
