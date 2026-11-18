@@ -238,13 +238,13 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7dxx` program + data (must stay below $8000; ~0.5 KB free). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 20 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
-- `$8000-$bfff` the city (see "The city"): `BLOCKS` the 21 block designs
+- `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
   (512 bytes each, unpacked at start-up), `PRIV` 4 private copies, `GRID`
   (9 x 17), the `map_at` tables `MT_CB`/`MT_CY`/`MT_RG`/`MT_RH`/`MT_RL`
-  (256 bytes each, packed with the blocks), free from about $b800.
+  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `BAND_TAB` and `GRID_ORIG`, free from about $bdb0.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
@@ -272,9 +272,9 @@ world column 32 i - 13, row 16 j - 5, so avenues and streets are where they
 were in the old 128 x 128 map. The grid is 9 x 17 blocks (the outer ones
 partly outside); `block(kind, car, sub)` draws a design (offices, banks, card
 shops, a paint garage, parking lots, houses, a suburb park, the friend's
-house; 21 designs, at most 31 with the 4 private copies), the grid says
+house, two offices with a closed road; 23 designs, at most 31 with the 4 private copies), the grid says
 which design stands where (`grid`, targets and garages shuffled in by the
-city builder). At run time `GRID` (from `grid_orig`, reset every game) holds
+city builder). At run time `GRID` (from `GRID_ORIG`, reset every game) holds
 the page of each block. `map_at` (column a, row x -> `(zp0),y`, x kept; the
 two characters at each edge of the world are wall, `wall_row`/`wall_sub`)
 does the lookup with the `MT_*` tables (about 70 cycles); `y + 1` stays in
@@ -344,7 +344,14 @@ and the city is restored from the map (and `rowc`) afterwards.
 Police and cabs drive on the centre lines of the road grid (avenue centres
 x = 128 + 256 k (k 0-7), street centres y = 68 + 128 j (j 0-15); avenues are 6 characters
 wide, streets 5 rows high (the block layout in gfx_city.asm; change the
-node checks in chase.asm with them) and decide at the crossings:
+node checks in chase.asm with them) and decide at the crossings, skipping roads with a building 5 rows up or down or 8 columns
+left or right of the crossing (`npc_choose`, `node_cell`, `blk_at`; roadblocks are not put
+in one either). The city is not a pure grid: `NCLOSED` (14) office blocks have their avenue
+piece (`dNoAv`: buildings to column 29) or street piece (`dNoSt`: a row of buildings in
+rows 12-14) built over, at most one per crossing, so every crossing keeps two ways (the
+police would loop forever with none); not in block row 12 (the grass split needs the street
+above the suburb free of "w" pixels). The city builder saves and restores `seed` around
+this, so everything built after it (the title picture) stays the same. Then:
 cabs at random, police towards the player (longer distance first) and they
 turn around when the player is behind them.
 Turning: police cars and cabs choose their way 16 pixels before a crossing

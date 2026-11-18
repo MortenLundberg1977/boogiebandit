@@ -19,6 +19,8 @@
 .const CL_PAINT = 8             // the spray booth of a paint garage (drivable)
 .const SUB_ROW = 13 * 16 - 5    // the suburb: world rows 203-255 (block rows 13-16, SUB_J)
 .var inSub = false              // the city builder is drawing a suburb block
+.var closeAv = false            // block(): the avenue piece is closed (built over)
+.var closeSt = false            // block(): the street piece is closed
 
 .var chars = List()
 .var charKeys = Hashtable()
@@ -426,9 +428,16 @@
     .var mx = 27 + rnd(3)
     .var my = 1 + rnd(8)
     .if (rnd(3) == 0) .eval mstamp(mx, my, MANHOLE)
+    // a closed road: the avenue piece built over (lot buildings to column
+    // 29) or the street piece (sidewalks and a row of buildings in rows 12-14)
+    .if (closeAv) .eval mfill(26, 0, 6, 11, WALK)
+    .if (closeSt) {
+        .eval mfill(0, 11, 26, 5, WALK)
+        .eval buildings(LBX, 12, LBW, 3)
+    }
     // the lot
     .var cx = LBX + floor((LBW - 10) / 2)
-    .if (kind == "office" || kind == "houses") .eval buildings(LBX, LBY, LBW, LBH)
+    .if (kind == "office" || kind == "houses") .eval buildings(LBX, LBY, closeAv ? LBW + 6 : LBW, LBH)
     .if (kind == "bank") {
         .eval buildings(LBX, LBY, cx - LBX, LBH)
         .eval nine(cx, LBY, 10, LBH, roofBank)
@@ -512,13 +521,11 @@
 .var dFriend = block("friend", 0, true)
 .var dSubBank = block("bank", 0, true)
 .var dSubCard = block("card", 2, true)
-.const NBLOCKS = blocks.size()
-.const NPRIV = 4                // spare blocks: private copies of blocks a car was stolen from
-.errorif NBLOCKS + NPRIV > 31, "too many block designs: " + NBLOCKS
 
 // the grid: what stands where. Targets, garages and the friend's house
 // only in whole blocks (not at the edge of the world).
 .const SUB_J = 13               // block rows 13-16: the suburb
+.const NCLOSED = 14             // closed road pieces in the city
 .var grid = List()
 .for (var i = 0; i < GW * GH; i++) .eval grid.add(-1)
 .function gset(i, j, d) {
@@ -599,6 +606,47 @@
     }
 }
 
+
+// closed roads: office blocks with their avenue or street piece built over
+// (T-junctions, longer ways round). Every crossing loses at most one way, so
+// police and cabs (which look down each road at a crossing: npc_choose)
+// always have at least two. Not next to the suburb (its grass split needs
+// the street row above it free of "w" pixels) or at the edges.
+.var seedKeep = seed           // (the rest of the build draws the same random numbers as before)
+.eval closeAv = true
+.var dNoAv = block("office", 0, false)
+.eval closeAv = false
+.eval closeSt = true
+.var dNoSt = block("office", 0, false)
+.eval closeSt = false
+.var lost = Hashtable()          // crossings (avenue, street) that lost a way
+.var closeList = List()
+.for (var j = 1; j < SUB_J - 1; j++) .for (var i = 1; i < GW - 1; i++) .eval closeList.add(i + j * GW)
+.eval shuffled(closeList)
+.var nClosed = 0
+.for (var n = 0; n < closeList.size() && nClosed < NCLOSED; n++) {
+    .var g = closeList.get(n)
+    .var i = mod(g, GW)
+    .var j = floor(g / GW)
+    .var isOff = false
+    .for (var k = 0; k < dOffice.size(); k++) .if (dOffice.get(k) == grid.get(g)) .eval isOff = true
+    .if (isOff) {
+        .var av = rnd(2) == 0
+        .var c1 = av ? (toIntString(i) + "," + toIntString(j - 1)) : (toIntString(i - 1) + "," + toIntString(j))
+        .var c2 = toIntString(i) + "," + toIntString(j)
+        .if (!lost.containsKey(c1) && !lost.containsKey(c2)) {
+            .eval lost.put(c1, true)
+            .eval lost.put(c2, true)
+            .eval grid.set(g, av ? dNoAv : dNoSt)
+            .eval nClosed = nClosed + 1
+        }
+    }
+}
+.eval seed = seedKeep
+.print "Closed roads: " + nClosed
+.const NBLOCKS = blocks.size()
+.const NPRIV = 4                // spare blocks: private copies of blocks a car was stolen from
+.errorif NBLOCKS + NPRIV > 31, "too many block designs: " + NBLOCKS
 .var WALL_SUB = subVariant(WALLCH)
 .var CITY_CHARS = chars.size()
 

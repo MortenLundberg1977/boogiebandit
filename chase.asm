@@ -411,7 +411,32 @@ npc_choose:
     lda vmask
     and #%1101
     sta vmask
-!:  lda n_type,x
+!:  // closed roads: a building 5 rows up or down / 8 columns left or right
+    // of the crossing (gfx_city.asm: dNoAv, dNoSt)
+    jsr node_cell
+    stx oc_x
+    ldy #3
+oc_loop:
+    sty oc_d
+    lda oc_r
+    clc
+    adc oc_dr,y
+    tax
+    lda oc_c
+    clc
+    adc oc_dc,y
+    jsr blk_at
+    beq !+
+    ldy oc_d
+    lda bit_tab,y
+    eor #$ff
+    and vmask
+    sta vmask
+!:  ldy oc_d
+    dey
+    bpl oc_loop
+    ldx oc_x
+    lda n_type,x
     cmp #NT_COP
     beq nc_cop
     lda n_dir,x                     // cabs don't turn around
@@ -516,6 +541,36 @@ nc_pick:
     jmp nc_rand
 nc_set2:
     jmp nc_set
+
+// the map cell of car x's position (oc_c = column, oc_r = row)
+node_cell:
+    lda n_xl,x
+    lsr
+    lsr
+    lsr
+    sta oc_c
+    lda n_xh,x
+    asl
+    asl
+    asl
+    asl
+    asl
+    ora oc_c
+    sta oc_c
+    lda n_yl,x
+    lsr
+    lsr
+    lsr
+    sta oc_r
+    lda n_yh,x
+    asl
+    asl
+    asl
+    asl
+    asl
+    ora oc_r
+    sta oc_r
+    rts
 
 // a police car turns around between crossings when the player is more than
 // 48 pixels behind it, near its road
@@ -1111,9 +1166,15 @@ bt_vset:
     lda #1                          // facing east, stretched sideways
     sta n_dir + 2
 bt_set:
+    ldx #2                          // not inside a closed road piece
+    jsr node_cell
+    lda oc_c
+    ldx oc_r
+    jsr blk_at
+    bne !+
     lda #NT_BLOCK
     sta n_type + 2
-    rts
+!:  rts
 
 // a roadblock (x = slot 2): far behind -> gone; touched -> busted
 nb_block:

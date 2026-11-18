@@ -49,6 +49,7 @@
 .const MT_RL = MT_RH + 256
 .const DANCE_SRC = MT_RL + 256      // the 4 dancer sprites (copied to DANCE_SPR for the score page)
 .const BAND_TAB = DANCE_SRC + 256   // the colour of the "y" pixels per block row (0-16; 13-16 the suburb)
+.const GRID_ORIG = BAND_TAB + 32    // the city grid as built (GRID is reset from it every game)
 .const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -443,6 +444,10 @@
 .label dr_end = b2alloc(1)
 .label dc_k = b2alloc(1)
 .label dance_flag = b2alloc(1)     // the score page's dancers are on
+.label oc_c = b2alloc(1)            // npc_choose / block_try: map cell, direction, slot
+.label oc_r = b2alloc(1)
+.label oc_d = b2alloc(1)
+.label oc_x = b2alloc(1)
 .label lv_cy = b2alloc(1)           // the city's colour bands: top row they are set for ($ff: redo)
 .label band_w = b2alloc(1)          // (band_rows: the block row, rows left in it)
 .label br_left = b2alloc(1)
@@ -1557,15 +1562,24 @@ gl_tl:      .fill glTL.size(), glTL.get(i)
 gl_tr:      .fill glTR.size(), glTR.get(i)
 gl_bl:      .fill glBL.size(), glBL.get(i)
 gl_br:      .fill glBR.size(), glBR.get(i)
-// the city grid as built (GRID is reset from it at every game start) and
-// grid row offsets; a row of wall for the edges of the world (both in one
+// grid row offsets (the city grid as built is GRID_ORIG, after the bands);
+// a row of wall for the edges of the world (both in one
 // page: map_at's callers check the page)
-grid_orig:  .fill GW * GH, (BLOCKS >> 8) + 2 * grid.get(i)
 gmul:       .fill GH, i * GW
 // small tables in what would be padding before the wall rows
 d018_tab:   .byte D018_A, D018_B
 bit_tab:    .byte 1, 2, 4, 8, 16, 32, 64, 128
 bounce_tab: .byte 20, 18, 17, 16, 16, 17, 18, 20
+oc_dr:      .byte 256 - 5, 0, 5, 0  // npc_choose: where to look from a crossing (N E S W)
+oc_dc:      .byte 0, 8, 0, 256 - 8
+// column a, row x: not zero if the character there blocks a car
+blk_at:
+    jsr map_at
+    lda (zp0),y
+    tay
+    lda class_tab,y
+    and #1
+    rts
 .align 64
 wall_row:   .fill 32, WALLCH
 wall_sub:   .fill 32, WALL_SUB
@@ -2324,7 +2338,7 @@ map_wr:
     lda priv_gi,x                   // that copy is taken: its block is the
     bmi !+                          // shared design again
     tay
-    lda grid_orig,y
+    lda GRID_ORIG,y
     sta GRID,y
 !:  ldy ma_g
     tya
@@ -2355,11 +2369,11 @@ mw_put:
     sta (zp0),y
     rts
 
-// the city as built (a new game): the grid back from grid_orig, no
+// the city as built (a new game): the grid back from GRID_ORIG, no
 // private copies
 grid_reset:
     ldx #GW * GH
-!:  lda grid_orig - 1,x
+!:  lda GRID_ORIG - 1,x
     sta GRID - 1,x
     dex
     bne !-
@@ -4685,7 +4699,9 @@ hd_common:
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(r - BLK_Y0, 8) * 32)
 .for (var i = 0; i < danceSpr.size(); i++) .eval blockBytes.add(danceSpr.get(i))   // the dancers (DANCE_SRC)
 .for (var i = 0; i < bandCols.size(); i++) .eval blockBytes.add($08 | bandCols.get(i))   // BAND_TAB
-.errorif BAND_TAB + bandCols.size() > $c000, "the map tables, the dancers and the bands must end below $c000"
+.for (var i = bandCols.size(); i < 32; i++) .eval blockBytes.add(0)
+.for (var i = 0; i < GW * GH; i++) .eval blockBytes.add((BLOCKS >> 8) + 2 * grid.get(i))   // GRID_ORIG
+.errorif GRID_ORIG + GW * GH > $c000, "the map tables, the dancers, the bands and the grid must end below $c000"
 .var mapPacked = rlePack(blockBytes)
 .const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0
