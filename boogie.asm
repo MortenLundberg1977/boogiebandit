@@ -47,6 +47,8 @@
 .const MT_RG = MT_CY + 256
 .const MT_RH = MT_RG + 256
 .const MT_RL = MT_RH + 256
+.const DANCE_SRC = MT_RL + 256      // the 4 dancer sprites (copied to DANCE_SPR for the score page)
+.const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
 .const IRQ_LINE = 250
@@ -439,6 +441,7 @@
 .label dr_hi = b2alloc(1)
 .label dr_end = b2alloc(1)
 .label dc_k = b2alloc(1)
+.label dance_flag = b2alloc(1)     // the score page's dancers are on
 .errorif bss > $0400, "arrays full"
 
 // =====================================================================
@@ -1095,6 +1098,9 @@ title_go:
     sta $d010
     sta title_x
     sta title_x + 1
+    lda page                        // (the score page first: the dancers)
+    beq title_release
+    jsr dance_setup
 title_release:
     jsr read_input
     lda joy
@@ -1104,8 +1110,12 @@ title_loop:
     lda vbl
 !:  cmp vbl
     beq !-
+    lda dance_flag                  // the score page: dancers, no cab
+    beq !+
+    jsr dance_frame
+    jmp tl_blink
     // the cab
-    lda title_x
+!:  lda title_x
     clc
     adc #2
     sta title_x
@@ -1126,13 +1136,17 @@ title_loop:
     asl
     asl
     sta $d010
+tl_blink:
     // blink "PRESS FIRE"
     lda vbl
     and #$20
     beq !+
     lda #%00000111
 !:  ora #%00001000
-    sta $d015
+    ldx dance_flag
+    beq !+
+    ora #%11111000                  // (and the dancers)
+!:  sta $d015
     // picture 10 s, top bandits 5 s
     inc title_t
     bne !+
@@ -1158,8 +1172,113 @@ show_page:
     sta title_t + 1
     lda page
     bne !+
+    jsr dance_off
     jmp show_picture
-!:  jmp show_scores
+!:  jsr show_scores
+    jmp dance_setup
+
+// ---------------------------------------------------------------- the dancers
+// On the score page five dancers (sprites 3-7, x- and y-expanded) dance in a
+// line under the table: the bandit, the guard, the officer, the shop owner
+// and a cab driver, a move every 16 frames (arms up, point right, hands on
+// hips, point left), neighbours mirrored, bouncing on the beat.
+dance_x:    .byte 60, 116, 172, 228, <284
+dance_col:  .byte 8, 5, 6, 4, 7
+dance_seq:  .byte 0, 1, 2, 3
+.const DANCE_Y = 188              // (hands below the table, feet above PRESS FIRE)
+dance_setup:
+    lda #232                        // PRESS FIRE a little lower
+    sta $d001
+    sta $d003
+    sta $d005
+    lda #<DANCE_SRC
+    sta zsrc
+    lda #>DANCE_SRC
+    sta zsrc + 1
+    lda #<DANCE_SPR
+    sta zdst
+    lda #>DANCE_SPR
+    sta zdst + 1
+    ldx #1
+    jsr copy_pages
+    ldx #4
+!:  txa
+    asl
+    tay
+    lda dance_x,x
+    sta $d006,y
+    lda #DANCE_Y
+    sta $d007,y
+    lda dance_col,x
+    sta $d02a,x
+    dex
+    bpl !-
+    lda #%10000000                  // the last one is right of x = 255
+    sta $d010
+    lda #11                         // hair and trousers dark grey (black
+    sta $d025                       // does not show on the black page)
+    lda #%11111000
+    sta $d01c
+    ora #%00000111
+    sta $d017
+    sta $d01d
+    lda #1
+    sta dance_flag
+    jmp dance_frame
+// back to the cab (the picture page)
+dance_off:
+    lda #222                        // PRESS FIRE where it was
+    sta $d001
+    sta $d003
+    sta $d005
+    lda #0
+    sta dance_flag
+    sta $d010
+    lda #%00001000
+    sta $d01c
+    lda #%00000111
+    sta $d017
+    sta $d01d
+    lda #SP_CAR + 4
+    sta SCR_A + $3fb
+    lda #7
+    sta $d02a
+    lda #206
+    sta $d007
+    rts
+dance_frame:
+    lda vbl                         // the move: every 16 frames
+    lsr
+    lsr
+    lsr
+    lsr
+    sta t0
+    ldx #4
+!:  txa                             // neighbours mirrored (2 moves apart)
+    and #1
+    asl
+    clc
+    adc t0
+    and #3
+    tay
+    lda dance_seq,y
+    clc
+    adc #DANCE_SPR / 64 & 255
+    sta SCR_A + $3fb,x
+    dex
+    bpl !-
+    lda vbl                         // a bounce on every move
+    and #15
+    cmp #4
+    lda #DANCE_Y
+    bcs !+
+    sbc #2
+!:  ldx #8
+!:  sta $d007,x
+    dex
+    dex
+    bpl !-
+    rts
 
 // =====================================================================
 // game
@@ -4482,7 +4601,8 @@ hd_common:
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(floor((r - BLK_Y0) / 16) * GW)
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(floor((r - BLK_Y0) / 8), 2))
 .for (var r = 0; r < 256; r++) .eval blockBytes.add(mod(r - BLK_Y0, 8) * 32)
-.errorif MT_RL + 256 > $c000, "the map tables must end below $c000"
+.for (var i = 0; i < danceSpr.size(); i++) .eval blockBytes.add(danceSpr.get(i))   // the dancers (DANCE_SRC)
+.errorif DANCE_SRC + 256 > $c000, "the map tables and the dancers must end below $c000"
 .var mapPacked = rlePack(blockBytes)
 .const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0

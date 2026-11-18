@@ -219,6 +219,39 @@
 .eval addGuard(guardRight, gLegsSideA, true)
 .eval addGuard(guardRight, gLegsSideB, true)
 
+
+// the dancers on the high score page (4 frames, facing the viewer): arms
+// up, pointing up to the right, hands on the hips, pointing up to the left.
+// Shown x- and y-expanded in the colours of the bandit, the guard, the
+// officer, the shop owner and a cab driver. They travel with the city data
+// (boogie.asm: DANCE_SRC) and are copied to $c400 for the score page.
+.var danceA = List().add(
+    "w..........w", ".c..kkkk..c.", ".c.kkkkkk.c.", "..ckkkkkkc..", "..ckwwwwkc..",
+    "...wkwwkw...", "...wwwwww...", "....wkkw....", "...cccccc...", "...cccccc...",
+    "...ccwwcc...", "...cccccc...", "...kkkkkk...", "..kk....kk..", "..kk....kk..",
+    ".kk......kk.", ".kk......kk.", "kkk......kkk")
+.var danceB = List().add(
+    "...........w", "..........c.", "....kkkk.c..", "...kkkkkkc..", "..kkkkkkkk..",
+    "..kkwwwwkk..", "...wkwwkw...", "...wwwwww...", "....wkkw....", "..ccccccc...",
+    ".c.cccccc...", ".cccccccc...", "...cccccc...", "...kkkkkk...", "...kk..kk...",
+    "..kk....kk..", "..kk.....kk.", ".kkk.....kkk")
+.var danceD = List().add(
+    "............", "....kkkk....", "...kkkkkk...", "..kkkkkkkk..", "..kkwwwwkk..",
+    "...wkwwkw...", "...wwwwww...", "....wkkw....", "..cccccccc..", ".c.cccccc.c.",
+    ".cc.cccc.cc.", "...cccccc...", "...kkkkkk...", "..kk....kk..", ".kk......kk.",
+    ".kk......kk.", "..kk....kk..", ".kkk....kkk.")
+.var danceC = List()
+.for (var i = 0; i < danceB.size(); i++) .eval danceC.add(mirror(danceB.get(i)))
+.var danceSpr = List()
+.function addDance(art) {
+    .var d = rotSprite(art, 0)
+    .for (var i = 0; i < 64; i++) .eval danceSpr.add(d.get(i))
+    .return 0
+}
+.eval addDance(danceA)
+.eval addDance(danceB)
+.eval addDance(danceD)
+.eval addDance(danceC)
 // bank marker: a bouncing arrow pointing down at the door (2 colours)
 .for (var fr = 0; fr < 2; fr++) {
     .var art = List()

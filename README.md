@@ -10,7 +10,7 @@ get a new paint job, and bring the loot to your friend's house in the suburb.
 ![Title](screenshots/1_title_b.png) ![Robbery](screenshots/5_robbery_1.png)
 ![Chase](screenshots/10_chase.png) ![City map](screenshots/11_city_map.png)
 ![Officer shooting](screenshots/16_officer_shooting.png) ![Paint garage](screenshots/15_paint_garage.png)
-![Guard on foot](screenshots/20_guard.png) ![Friend's house](screenshots/21_friends_house.png)
+![Guard on foot](screenshots/20_guard.png) ![Friend's house](screenshots/21_friends_house.png) ![Dancers](screenshots/22_dancers.png)
 
 ## How to play
 
@@ -52,7 +52,7 @@ get a new paint job, and bring the loot to your friend's house in the suburb.
 - The arrow (lower left): press A to switch between the next job (yellow
   arrow), your friend's house (green) and the nearest paint garage (pink).
 - Three hearts, then game over. The best five bandits make the table on the
-  title screen.
+  title screen, with the whole gang dancing under it.
 - Watch out for the yellow cabs.
 
 ## Controls (joystick in port 2)

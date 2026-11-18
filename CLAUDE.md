@@ -94,7 +94,15 @@ by `gen_shift_ba`.
 
 Three lives (hearts in the HUD); then game over, name
 entry if the score makes the top 5 (kept until the C64 is switched off), and
-the title alternates between the picture and the table.
+the title alternates between the picture and the table. On the table page
+five dancers (sprites 3-7, x- and y-expanded: the bandit, the guard, the
+officer, the shop owner and a cab driver) dance in a line under it
+(`dance_setup`/`dance_frame`/`dance_off` in boogie.asm, 4 frames `danceSpr`
+in gfx_sprites.asm: arms up, point right, hands on hips, point left; a move
+every 16 frames, neighbours mirrored, a bounce). The frames travel with the
+city data to `DANCE_SRC` ($b800) and are copied to `DANCE_SPR` = $c400
+(screen B, unused on the title pages) for the page; `$d025` is dark grey
+there (black does not show on the black page), PRESS FIRE 10 lines lower.
 
 Targets are 16 banks and 16 card shops (`NBANKS` = 32, placed by the city
 builder in gfx_city.asm, 3 of each in the suburb; targets 16-31 are card
@@ -148,7 +156,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V2.0.0" in the top right of the title
+a fix only PATCH + 1), drawn as "V2.1.0" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 
