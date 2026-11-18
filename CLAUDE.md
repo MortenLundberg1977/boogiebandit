@@ -66,7 +66,8 @@ Three paint garages (yellow PAINT sign, an open spray booth facing the street
 below; small yellow marks on the city map): stop in the booth (any time, not
 only in a chase) and after 1 second of spraying the car has a new colour
 (once per visit: `paint_lock` until it leaves the booth; at random from
-`paint_cols`, never the colour it has: `new_paint`), costs $300 and is not
+`paint_cols`, never the colour it has: `new_paint`), costs $300 (from the
+carried loot when there is that much, else from the score) and is not
 the getaway car any more (`clean_car`: `hot` = 0, so it may deliver at the
 friend's house; with loot on board the arrow turns to the friend's house).
 During a chase every police car loses the trail (`NT_LOST`: they drive on at
@@ -145,7 +146,7 @@ crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 ## Version
 
 `version.asm` holds `VERSION` (semantic versioning: a new feature MINOR + 1,
-a fix only PATCH + 1), drawn as "V1.5.0" in the top right of the title
+a fix only PATCH + 1), drawn as "V1.5.1" in the top right of the title
 picture (`gfx_intro.asm`). Bump it with every change merged into main and tag
 that commit `v<version>`.
 

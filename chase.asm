@@ -1241,7 +1241,24 @@ new_paint:
     beq new_paint
     sta car_col
     jsr clean_car                   // a new look: not the getaway car any more
-    sed                             // $300 for the paint job
+    lda carry_h                     // $300 for the paint job: from the loot
+    bne np_carry                    // carried, if there is that much
+    lda carry_l
+    cmp #$03
+    bcc np_score
+np_carry:
+    sed
+    sec
+    lda carry_l
+    sbc #$03
+    sta carry_l
+    lda carry_h
+    sbc #0
+    sta carry_h
+    cld
+    jmp np_paid
+np_score:
+    sed                             // (else from the score)
     sec
     lda score + 1
     sbc #$03
@@ -1257,6 +1274,7 @@ new_paint:
     sta score + 2
 !:  lda #1
     sta score_dirty
+np_paid:
     lda #SFX_CHING
     jsr sfx_play
     // the police look for a red car...

@@ -46,7 +46,8 @@ top right corner of the title picture.
   or duck behind a building), and from the third job on they set up
   roadblocks ahead of you. You can just squeeze past one on the sidewalk.
 - Three paint garages (look for the yellow PAINT sign; small yellow marks on
-  the city map). Stop inside the spray booth: $300 for a new colour (always a
+  the city map). Stop inside the spray booth: $300 for a new colour, paid
+  from the loot you carry (else from your score; always a
   different one; it takes a second). Your car is then no longer the getaway
   car, so you can take the loot to your friend's house in it, and during a
   chase the police lose your trail.
