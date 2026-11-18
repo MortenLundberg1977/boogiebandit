@@ -51,6 +51,11 @@
 .const BAND_TAB = DANCE_SRC + 256   // the colour of the "y" pixels per block row (0-16; 13-16 the suburb)
 .const GRID_ORIG = BAND_TAB + 32    // the city grid as built (GRID is reset from it every game)
 .const MM_CODE = GRID_ORIG + 160    // the city map screen: what each character shows as (mapCode)
+.const WORD_GLYPHS = MM_CODE + 256  // the comic bubble glyphs (wordGlyphs) and their
+.const GL_TL = WORD_GLYPHS + wordGlyphs.size()   // corner characters
+.const GL_TR = GL_TL + glTL.size()
+.const GL_BL = GL_TR + glTR.size()
+.const GL_BR = GL_BL + glBL.size()
 .const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
@@ -65,6 +70,8 @@
 .const ST_MSG = 3                // a message bubble (BUSTED! ...), the game waits
 
 .const MAXSPD = $0300           // 3.0 pixels a frame
+.const THROW_SPEED = $0200      // hitting a cab this fast throws Vinnie out
+.const FLY_FRAMES = 32
 .const REVMAX = $0100
 .const ACCEL = 6
 .const BRAKE = 14
@@ -443,6 +450,11 @@
 .label dr_end = b2alloc(1)
 .label dc_k = b2alloc(1)
 .label dance_flag = b2alloc(1)     // the score page's dancers are on
+.label fly = b2alloc(1)             // thrown out of the car: frames of flight left
+.label fly_n = b2alloc(1)           // (pixels left this frame on one axis)
+.label fv = b2alloc(4)              // flight velocity x, y (8.8, signed)
+.label fax = b2alloc(1)             // fractions of the position
+.label fay = b2alloc(1)
 .label oc_c = b2alloc(1)            // npc_choose / block_try: map cell, direction, slot
 .label oc_r = b2alloc(1)
 .label oc_d = b2alloc(1)
@@ -1314,6 +1326,8 @@ game_start:
     sta $d02d
     jsr city_colours
 
+    lda #0                          // not flying from a crash
+    sta fly
     lda #<START_X
     sta car_xl
     lda #>START_X
@@ -1553,14 +1567,9 @@ gen_shift_ba:
     sta t3
     jmp gen_shift
 
-// the comic bubble words and their glyphs (in the program: they grow with new messages)
+// the comic bubble words (their glyphs are in the city area: WORD_GLYPHS)
 word_start: .fill wordStart.size(), wordStart.get(i)
 word_len:   .fill wordLen.size(), wordLen.get(i)
-word_glyphs: .fill wordGlyphs.size(), wordGlyphs.get(i)
-gl_tl:      .fill glTL.size(), glTL.get(i)
-gl_tr:      .fill glTR.size(), glTR.get(i)
-gl_bl:      .fill glBL.size(), glBL.get(i)
-gl_br:      .fill glBR.size(), glBR.get(i)
 // grid row offsets (the city grid as built is GRID_ORIG, after the bands);
 // a row of wall for the edges of the world (both in one
 // page: map_at's callers check the page)
@@ -2642,6 +2651,10 @@ place_man:                          // a/y = offset from the car; carry set if f
     rts
 
 do_walk:
+    lda fly                         // still flying from a crash
+    beq !+
+    jmp fly_step
+!:
     lda joy_new
     and #$10
     beq dw_move
@@ -3230,11 +3243,11 @@ nb_t:
     sta t3
     ldy #1
 !:  ldx t2
-    lda word_glyphs,x
+    lda WORD_GLYPHS,x
     tax
-    lda gl_tl,x
+    lda GL_TL,x
     sta tbuf,y
-    lda gl_tr,x
+    lda GL_TR,x
     sta tbuf + 1,y
     iny
     iny
@@ -3250,11 +3263,11 @@ nb_t:
     sta t3
     ldy #1
 !:  ldx t2
-    lda word_glyphs,x
+    lda WORD_GLYPHS,x
     tax
-    lda gl_bl,x
+    lda GL_BL,x
     sta tbuf,y
-    lda gl_br,x
+    lda GL_BR,x
     sta tbuf + 1,y
     iny
     iny
@@ -4702,7 +4715,12 @@ hd_common:
 .for (var i = 0; i < GW * GH; i++) .eval blockBytes.add((BLOCKS >> 8) + 2 * grid.get(i))   // GRID_ORIG
 .for (var i = GW * GH; i < 160; i++) .eval blockBytes.add(0)
 .for (var i = 0; i < 256; i++) .eval blockBytes.add(mapCode.get(i))   // MM_CODE
-.errorif MM_CODE + 256 > $c000, "the map tables, the dancers, the bands, the grid and the map codes must end below $c000"
+.for (var i = 0; i < wordGlyphs.size(); i++) .eval blockBytes.add(wordGlyphs.get(i))   // WORD_GLYPHS
+.for (var i = 0; i < glTL.size(); i++) .eval blockBytes.add(glTL.get(i))
+.for (var i = 0; i < glTR.size(); i++) .eval blockBytes.add(glTR.get(i))
+.for (var i = 0; i < glBL.size(); i++) .eval blockBytes.add(glBL.get(i))
+.for (var i = 0; i < glBR.size(); i++) .eval blockBytes.add(glBR.get(i))
+.errorif GL_BR + glBR.size() > $c000, "the city area tables must end below $c000: " + toHexString(GL_BR + glBR.size())
 .var mapPacked = rlePack(blockBytes)
 .const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0

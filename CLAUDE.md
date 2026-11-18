@@ -136,7 +136,13 @@ Two yellow cabs drive around near the player (new ones appear when they get
 far away); they keep to the right of the road, the car bounces off them, and
 a cab that is blocked honks and after a second turns around; driving away
 from a cab you touch is always allowed (only moves towards it bounce). Cabs
-honk on a nudge and now and then on their own. Parked cars along the curbs
+honk on a nudge and now and then on their own. Hitting a cab at `THROW_SPEED`
+($0200, 2/3 of top speed) or faster throws Vinnie out (`throw_out` in chase.asm):
+the car stops dead, he flies on in its direction at 1.5 x its speed, slowing
+by 1/16 a frame (`fv`, `fax`/`fay`), tumbling (a quarter turn every 4 frames)
+for `FLY_FRAMES` (32: about 52 pixels, three car lengths) or until a wall
+stops him (`fly_step`, run by `do_walk` while `fly` is not 0); then he is on
+foot and can get back in. Parked cars along the curbs
 and in the parking lots are cabs (in the colour of their block row), white,
 grey and black cars and black
 ones with coloured stripes (`parkedCars` in gfx_city.asm, picked from the
@@ -240,13 +246,13 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 200 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 180 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
   (512 bytes each, unpacked at start-up), `PRIV` 4 private copies, `GRID`
   (9 x 17), the `map_at` tables `MT_CB`/`MT_CY`/`MT_RG`/`MT_RH`/`MT_RL`
-  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `BAND_TAB`, `GRID_ORIG` and `MM_CODE` (the city map's character codes), free from about $beb0.
+  (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `BAND_TAB`, `GRID_ORIG`, `MM_CODE` (the city map's character codes) and the comic bubble glyphs (`WORD_GLYPHS`, `GL_TL`-`GL_BR`), free from about $bfa8.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,

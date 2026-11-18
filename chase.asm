@@ -1613,6 +1613,11 @@ car_bounce:
     dex
     bpl !-
     jsr abs_speed
+    lda t1                          // fast: Vinnie goes through the windscreen
+    cmp #>THROW_SPEED
+    bcc !+
+    jmp throw_out
+!:
     lda t1
     bne !+
     lda t0
@@ -1638,6 +1643,144 @@ cb_soft:
     sta burn
     rts
 
+
+// ---------------------------------------------------------------- thrown out
+// a crash into a cab at THROW_SPEED or more: the car stops dead where it is
+// and Vinnie flies on in its direction (1.5 x its speed, slowing by 1/16 a
+// frame: about three car lengths), tumbling, until FLY_FRAMES are over or
+// he hits a wall; then he is on foot (the car can be taken again)
+throw_out:
+    ldx #3
+!:  lda vx_l,x                      // (vx_l, vx_h, vy_l, vy_h)
+    sta fv,x
+    dex
+    bpl !-
+    ldx #0
+    jsr fv_more
+    ldx #2
+    jsr fv_more
+    lda car_xl
+    sta man_xl
+    lda car_xh
+    sta man_xh
+    lda car_yl
+    sta man_yl
+    lda car_yh
+    sta man_yh
+    lda #0
+    sta spd_l
+    sta spd_h
+    sta burn
+    sta man_anim
+    sta fax
+    sta fay
+    lda #FLY_FRAMES
+    sta fly
+    lda #ST_WALK
+    sta state
+    lda #SFX_CRASH
+    jmp sfx_play
+// fv += fv / 2 (x = 0: x, 2: y)
+fv_more:
+    lda fv + 1,x
+    cmp #$80
+    ror
+    sta t1
+    lda fv,x
+    ror
+    clc
+    adc fv,x
+    sta fv,x
+    lda t1
+    adc fv + 1,x
+    sta fv + 1,x
+    rts
+// fv -= fv / 16
+fv_less:
+    lda fv + 1,x
+    sta t1
+    lda fv,x
+    sta t0
+    ldy #4
+!:  lda t1
+    cmp #$80
+    ror t1
+    ror t0
+    dey
+    bne !-
+    lda fv,x
+    sec
+    sbc t0
+    sta fv,x
+    lda fv + 1,x
+    sbc t1
+    sta fv + 1,x
+    rts
+// one frame of the flight (do_walk while fly is not 0)
+fly_step:
+    dec fly
+    lda fly                         // tumbling: a quarter turn every 4 frames
+    lsr
+    lsr
+    and #3
+    sta man_dir
+    lda #3
+    sta bhw
+    lda #2
+    sta bmask
+    lda fax                         // x: the whole pixels this frame
+    clc
+    adc fv
+    sta fax
+    lda fv + 1
+    adc #0
+    sta fly_n
+fs_x:
+    lda fly_n
+    beq fs_y0
+    bmi !+
+    dec fly_n
+    lda #1
+    bne !++
+!:  inc fly_n
+    lda #$ff
+!:  ldy #0
+    sty t3
+    jsr man_try_x
+    lda t3
+    bne fs_x
+    beq fs_wall
+fs_y0:
+    lda fay                         // y
+    clc
+    adc fv + 2
+    sta fay
+    lda fv + 3
+    adc #0
+    sta fly_n
+fs_y:
+    lda fly_n
+    beq fs_slow
+    bmi !+
+    dec fly_n
+    lda #1
+    bne !++
+!:  inc fly_n
+    lda #$ff
+!:  ldy #0
+    sty t3
+    jsr man_try_y
+    lda t3
+    bne fs_y
+fs_wall:
+    lda #0                          // against a wall: he stops there
+    sta fly
+    rts
+fs_slow:
+    ldx #0
+    jsr fv_less
+    ldx #2
+    jmp fv_less
 // ---------------------------------------------------------------- arrests, timer
 bust:
     jsr impound

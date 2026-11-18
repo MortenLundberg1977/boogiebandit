@@ -58,6 +58,8 @@ the latest version; older ones on the [Releases](https://github.com/MortenLundbe
   chase the police lose your trail.
 - The arrow (lower left): press A to switch between the next job (yellow
   arrow), your friend's house (green) and the nearest paint garage (pink).
+- Ram a cab at full speed and Vinnie goes through the windscreen, three car
+  lengths down the road. Walk back to the car (or steal another).
 - Three hearts, then game over. The best five bandits make the table on the
   title screen, with the whole gang dancing under it.
 - Watch out for the yellow cabs.
