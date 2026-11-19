@@ -74,7 +74,8 @@ the standard one.
   lengths down the road. Walk back to the car (or steal another).
 - Three hearts, then game over. The best five bandits make the table on the
   title screen, with the whole gang dancing under it.
-- Watch out for the yellow cabs.
+- Watch out for the yellow cabs, and the city bus: it stops at every bus stop
+  (the signs along the avenues) for two seconds.
 
 ## Controls (joystick in port 2)
 

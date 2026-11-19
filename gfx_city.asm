@@ -84,6 +84,10 @@
 .var WALK = one(rows8("wwww", "wwww", "wwww", "wwww", "wwww", "wwww", "wwww", "wwww"), CL_FREE)
 .var WALK2 = one(rows8("wwww", "wwww", "ww.w", "w.ww", "wwww", "wwww", "wwww", "wwww"), CL_FREE)
 .var HYDRANT = one(rows8("wwww", "wwww", "wbbw", "bbbb", "wbbw", "wwww", "wwww", "wwww"), CL_FREE)
+// a bus stop sign on the sidewalk on both sides of every avenue in the city,
+// in the middle of the block (BUS_ROW); the bus (chase.asm) stops there
+.var BUSSTOP = one(rows8("bbbb", "byyb", "byyb", "bbbb", "wbww", "wbww", "wbww", "wwww"), CL_FREE)
+.const BUS_ROW = 5
 .var WALLCH = one(rows8("bbbw", "bbbw", "wwww", "bwbb", "bwbb", "wwww", "bbbw", "bbbw"), CL_SOLID)
 
 // ---------------------------------------------------------------- roofs
@@ -488,6 +492,10 @@
         .eval carSpot.put("" + blocks.size(), List().add(26, cy))
     }
     .if (car == 2) .eval mstamp(30, 2 + rnd(4), parked(30, 6))
+    .if (!sub) .for (var x = 0; x < 26; x = x + 25) {          // the bus stops
+        .var c = mget(x, BUS_ROW)
+        .if (c == WALK || c == WALK2) .eval mset(x, BUS_ROW, BUSSTOP)
+    }
     .if (sub) .for (var i = 0; i < BW * BH; i++) .eval cityMap.set(i, subVariant(cityMap.get(i)))
     .var b = List()
     .for (var i = 0; i < BW * BH; i++) .eval b.add(cityMap.get(i))

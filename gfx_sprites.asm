@@ -219,6 +219,38 @@
 .eval addGuard(guardRight, gLegsSideA, true)
 .eval addGuard(guardRight, gLegsSideB, true)
 
+// the city bus (cab slot 3, chase.asm): a white roof with roof vents, the
+// stripes in the sprite colour, a black windscreen at the front; nose up,
+// 4 directions (N E S W) after the guard (sprites 244-247, $fd00). Drawn
+// twice as long with sprite expansion (y going north/south, x east/west).
+.var busArt = List().add(
+    "..kkkkkkkk..",
+    "kkwwwwwwwwkk",
+    "kkkkkkkkkkkk",
+    "kkkkkkkkkkkk",
+    "kkwwwwwwwwkk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkcckkkkcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkcckkkkcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkccwwwwcckk",
+    "kkwwwwwwwwkk",
+    "kkwwkkkkwwkk",
+    "..kkkkkkkk..")
+.for (var d = 0; d < 4; d++) {
+    .var s = rotSprite(busArt, d * 90)
+    .for (var i = 0; i < 64; i++) .eval guardSpr.add(s.get(i))
+}
+.const SP_BUS = 244             // + direction 0-3 (N E S W)
+
 
 // the dancers on the high score page (4 frames, facing the viewer): arms
 // up, pointing up to the right, hands on the hips, pointing up to the left.

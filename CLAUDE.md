@@ -143,7 +143,8 @@ voice 2; patterns that do not fit at MUSSTORE go into the program).
 The title picture says "MADE IN 2026 BY
 MORTEN" on the bottom sidewalk.
 
-Two yellow cabs drive around near the player (new ones appear when they get
+Two cabs drive around near the player (slot 4 a yellow cab, slot 3 =
+`BUS_SLOT` the city bus, see below) (new ones appear when they get
 far away); they keep to the right of the road, the car bounces off them, and
 a cab that is blocked honks and after a second turns around; driving away
 from a cab you touch is always allowed (only moves towards it bounce). Cabs
@@ -165,6 +166,23 @@ ones with coloured stripes (`parkedCars` in gfx_city.asm, picked from the
 position so the rest of the city stays the same; only the colours of the
 city characters are possible). Flooring it from standstill
 (burnout) and sliding at speed leave black tyre marks.
+
+The city bus (2.11.0): the cab in slot 3 (`BUS_SLOT`; `spawn_cab` makes it
+the bus, also when the slot comes back after an officer or a guard) drives
+with the cab code at `BUS_SPEED` (1.1), shown as a long white bus with blue
+stripes (`busArt` in gfx_sprites.asm, `BUS_COL`) in 4 directions (`bus_d`,
+from the view heading, in `place_npcs`), stretched with sprite expansion (y
+going north/south, x east/west; centred with `t4`/`t5` like the roadblock).
+`npc_touch` gives it a 27-pixel box along its way. Bus stops: a sign
+(`BUSSTOP`, the city's last character, its plate in the band colour) on the
+sidewalk on both sides of every avenue at block row `BUS_ROW` (5) in every
+city design (where the sidewalk is free; not in the suburb). The bus stops
+when its centre is at y mod 128 = `BUS_Y` on an avenue (`ns_node` in
+`npc_step`, x low = $80), north of the suburb, for `BUS_WAIT` (2 s, `bus_t`,
+counted down in `no_move`). Test: slot 3's `n_xl`/`n_xh`/`n_yl`/`n_yh`/`n_dir`
+are $3a9/$3ae/$3b3/$3b8/$3bd (check `build\boogie.sym`); poke $3a5 (slot 4's
+`n_type`) 0 to take the yellow cab away. Pokes right after the game starts
+can be lost (wait 4 s).
 
 Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar,
 A what the arrow points to.
@@ -357,7 +375,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; 18 bytes free, 4 in the REU edition; about 34 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`; or use the packed city area). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 540 bytes free since 2.11.0, 14 fewer in the REU edition: check "Program ends" in the build output; about 15 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`, `abs_speed`; big tables only used once the game runs belong in the tail, see below). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
@@ -368,13 +386,13 @@ into characters and de-duplicated.
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
   `$f800` police sprites 224-235 (after the B->A shift, which ends at $f771),
-  `$fb00` the guard sprites 236-243, `$fd00-$ff3f` free (sprites 244-252; overwritten by the bitmap pages, so re-made like the guard), `$ff40-$fff9` the REU edition's `THINK_STUB`,
+  `$fb00` the guard sprites 236-243 and the bus 244-247 (`SP_BUS`, N E S W, to `$fdff`; one packed block `guard_rle` in the tail, unpacked by `gen_shift_ba`), `$fe00-$ff3f` free (sprites 248-252; overwritten by the bitmap pages, so re-made like the guard), `$ff40-$fff9` the REU edition's `THINK_STUB`,
   `$e000` bitmap for the title pages, game over and the city map (colours in
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
   packed city blocks (`map_rle`, `MAP_AREA` = at least 6001 bytes + `TAIL_PAGES`
-  pages, padded: only needed at start-up), and after it the 2,042 bytes of (8 pages; parked cars are found by searching `park_chars` with `park_find`, no 256-byte table)
-  tables (`sin_tab` to `kind_col`: `tail_src` in the start-up data,
+  pages, padded: only needed at start-up), and after it the 1,620 bytes of (7 pages; parked cars are found by searching `park_chars` with `park_find`, no 256-byte table; `mul_speed` multiplies by shift and add, no square tables)
+  tables (`sin_tab` to `kind_col`, `guard_rle` among them: `tail_src` in the start-up data,
   assembled for `TAIL` = `map_rle` + 6001, parked at $e000 during start-up
   and copied there once the blocks are unpacked; `TAIL_PAGES`, asserts check
   it); B→A at `$e000`, generated again every time the city comes back from a
@@ -456,7 +474,7 @@ characters in the suburb rows lose their "w" pixels at build time
 (`subVariant` in gfx_city.asm: road markings and the card shop's white turn
 yellow, the rest grey); suburb art (`subStamp`: houses with hipped roofs,
 trees, hedges, the friend's house and driveway) and lawns (`WALK`) keep it.
-White and grey parked cars are black there. Only 1 of 256 characters is left. Comic bubbles are drawn
+White and grey parked cars are black there. No character is left (256; the last went to the bus stop sign). Comic bubbles are drawn
 into the shown screen with their own colour RAM while the camera stands still,
 and the city is restored from the map (and `rowc`) afterwards.
 
@@ -499,7 +517,7 @@ officer shooting and a roadblock ≈ $83.
 
 ## Ideas on the list
 
-More block designs (31 fit; characters are the limit: 1 left); a minimap in the HUD
+More block designs (31 fit; characters are the limit: none left); a minimap in the HUD
 (the full map is on SPACE); saving the high scores to disk. A park or river
 needs green/blue like the suburb: only as a horizontal band (a raster split
 like `irq_green`), since colour RAM is one value per screen row.

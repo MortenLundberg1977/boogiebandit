@@ -251,7 +251,15 @@ no_gone:
 no_move:
     lda #0                          // not blocked (any more)
     sta n_wait,x
-    lda n_cur,x                     // speed up to the cruising speed
+    cpx #BUS_SLOT                   // the bus at a stop: it waits there
+    bne !+
+    lda bus_t
+    beq !+
+    dec bus_t
+    lda #0
+    sta n_cur,x
+    rts
+!:  lda n_cur,x                     // speed up to the cruising speed
     cmp n_spd,x
     bcs !+
     adc #COP_ACCEL
@@ -311,6 +319,30 @@ ns_n:
     dec n_yh,x
 !:  dec n_yl,x
 ns_node:
+    cpx #BUS_SLOT                   // the bus at a bus stop (on an avenue,
+    bne ns_nb                       // north of the suburb): it stops
+    lda n_xl,x
+    cmp #$80
+    bne ns_nb
+    lda n_yl,x
+    and #$7f
+    cmp #BUS_Y
+    bne ns_nb
+    lda n_yh,x
+    cmp #>(SUB_J * 128 - 40)
+    bcc ns_stop
+    bne ns_nb
+    lda n_yl,x
+    cmp #<(SUB_J * 128 - 40)
+    bcs ns_nb
+ns_stop:
+    lda #BUS_WAIT
+    sta bus_t
+    lda #1                          // (no more steps this frame)
+    sta nsteps
+    lda #0
+    sta n_cur,x
+ns_nb:
     ldy n_dir,x                     // TURN_R pixels before a crossing?
     lda n_xl,x
     cmp pre_x,y
@@ -709,7 +741,21 @@ lane_y:     .byte 0, 6, 0, $fa, 0
 npc_touch:
     lda #13
 npc_near:
-    sta t0
+    sta t0                          // (t0 the x limit, t1 the y limit)
+    sta t1
+    cpx #BUS_SLOT                   // the bus is longer: 27 along its way
+    bne nt_box
+    ldy n_type,x
+    cpy #NT_CAB
+    bne nt_box
+    ldy #27
+    lda n_dir,x
+    lsr
+    bcc !+
+    sty t0
+    bcs nt_box
+!:  sty t1
+nt_box:
     lda nax_h
     bne nt_no
     lda nax_l
@@ -718,7 +764,7 @@ npc_near:
     lda nay_h
     bne nt_no
     lda nay_l
-    cmp t0
+    cmp t1
     bcs nt_no
     sec
     rts
@@ -1471,7 +1517,12 @@ spawn_cab:
     lda #NT_CAB
     sta n_type,x
     lda #CAB_SPEED
-    sta n_spd,x
+    cpx #BUS_SLOT                   // (slot 3: the bus, slower)
+    bne !+
+    lda #0
+    sta bus_t
+    lda #BUS_SPEED
+!:  sta n_spd,x
     jmp npc_at_node
 
 // after a robbery: one police car per wanted star, a few blocks away;
@@ -2795,7 +2846,24 @@ pn_show:
     lda lane16y,y
     ldy #py_l
     jsr add_lane
-    jmp pn_pos
+    lda ni                          // the bus: 4 directions, twice as long
+    cmp #BUS_SLOT                   // (expanded: centred another way)
+    bne pn_pos
+    lda vh
+    clc
+    adc #2
+    lsr
+    lsr
+    and #3
+    sta bus_d
+    lsr
+    bcc !+
+    lda #7
+    sta t4
+    bne pn_pos
+!:  lda #33
+    sta t5
+    bne pn_pos
 pn_off:
     cmp #NT_FOOT                    // a guard or the officer: a man sprite
     beq !+
@@ -2822,7 +2890,9 @@ pn_pos:
     lda slot_spr,x
     tax
     jsr spr_pos
-    bcc pn_skip
+    bcs !+
+    jmp pn_next                     // (off the screen)
+!:
     lda sh_y,x
     cmp #SPLIT_MIN_Y
     bcs pn_ok
@@ -2894,6 +2964,25 @@ pn_guard:
     sta sh_col,x
     jmp pn_next
 pn_cab:
+    cpy #BUS_SLOT
+    bne pn_taxi
+    lda bus_d                       // the bus
+    clc
+    adc #SP_BUS
+    sta sh_ptr,x
+    lda #BUS_COL
+    sta sh_col,x
+    lda bus_d
+    lsr
+    lda bit_tab,x
+    bcc !+
+    ora sh_xexp                     // east / west: x expanded
+    sta sh_xexp
+    bcs pn_next
+!:  ora sh_yexp                     // north / south: y expanded
+    sta sh_yexp
+    bcc pn_next
+pn_taxi:
     lda vh
     clc
     adc #SP_CAR

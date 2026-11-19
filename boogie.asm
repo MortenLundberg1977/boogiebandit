@@ -59,7 +59,7 @@
 .const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
 .const SP_GUARD = 236             // + dir*2 + step
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
-.const TAIL_PAGES = 8            // the tables moved out of the program (see tail_src)
+.const TAIL_PAGES = 7            // the tables moved out of the program (see tail_src)
 .const TEMP = $e000               // where they wait during start-up
 .const BLOCKS = $8000            // the city block designs (512 bytes each), then
 .const PRIV = BLOCKS + NBLOCKS * 512   // NPRIV private copies, then the grid
@@ -124,6 +124,11 @@
 .const FOOT_REACH = 10           // closer than this on foot: BUSTED!
 .const FOOT_WALL = 48            // steps along a wall before he tries straight again
 .const CAB_SPEED = 96            // 1/64 pixels a frame: 1.5
+.const BUS_SLOT = 3              // the cab in this slot is a city bus (slower, longer)
+.const BUS_SPEED = 72            // 1.1
+.const BUS_WAIT = 100            // 2 seconds at a stop
+.const BUS_COL = 6               // its stripes: blue
+.const BUS_Y = mod((BLK_Y0 + BUS_ROW) * 8 + 4 + 1024, 128)   // its stops: y mod 128 (gfx_city.asm)
 .const COP_SPEED = 100           // 1.6, + 12 for each bank robbed (at most COP_MAX)
 .const COP_MAX = 172             // 2.7 (the car does 3)
 .const COP_ACCEL = 3             // police and cabs speed up by this a frame
@@ -487,6 +492,8 @@
 .label lv_cy = b2alloc(1)           // the city's colour bands: top row they are set for ($ff: redo)
 .label band_w = b2alloc(1)          // (band_rows: the block row, rows left in it)
 .label br_left = b2alloc(1)
+.label bus_t = b2alloc(1)           // the bus: frames it still stands at its stop
+.label bus_d = b2alloc(1)           // (place_npcs: the direction it is shown in)
 .label rowc = b2alloc(25)           // colour RAM value of each screen row
 .errorif bss2 > $0300, "the second array area is full"
 .errorif bss > $0400, "arrays full"
@@ -1573,7 +1580,7 @@ gen_shift_ba:
     sta zdst + 1
     ldx #3
     jsr copy_pages
-    lda #<guard_rle                 // and the guard after them (packed)
+    lda #<guard_rle                 // and the guard and the bus after them (packed)
     sta zsrc
     lda #>guard_rle
     sta zsrc + 1
@@ -1645,10 +1652,7 @@ last_life:
 wall_row:   .fill 32, WALLCH
 wall_sub:   .fill 32, WALL_SUB
 .errorif floor(wall_row / 256) != floor((wall_sub + 31) / 256), "the wall rows must share a page"
-// the guard sprites (8, unpacked to GUARDSPR by gen_shift_ba)
-.var guardPacked = rlePack(guardSpr)
-guard_rle:  .fill guardPacked.size(), guardPacked.get(i)
-.errorif guardSpr.size() != 512, "the guard is 8 sprites"
+.errorif guardSpr.size() != 768, "the guard (8 sprites) and the bus (4)"
 
 // the city palette. The "y" pixels (windows, cabs, signs) take their colour
 // from colour RAM, set per screen row from the block row shown there
@@ -2270,35 +2274,19 @@ mul_speed:
     ror
     and #$c0
     ora t2
-    // a * m8 = f(a + m8) - f(|a - m8|), f(n) = n * n / 4
-    sta t2
+    // a * m8 (shift and add): high byte in a, low in res_l
+    sta res_l
+    lda #0
+    ldx #8
+    lsr res_l
+!:  bcc ms_add
     clc
     adc m8
-    tax
-    bcc !+
-    lda sqr_lo + 256,x
-    sta prod
-    lda sqr_hi + 256,x
-    sta prod + 1
-    jmp ms_diff
-!:  lda sqr_lo,x
-    sta prod
-    lda sqr_hi,x
-    sta prod + 1
-ms_diff:
-    lda t2
-    sec
-    sbc m8
-    bcs !+
-    eor #$ff
-    adc #1
-!:  tax
-    lda prod
-    sec
-    sbc sqr_lo,x
-    sta res_l
-    lda prod + 1
-    sbc sqr_hi,x
+ms_add:
+    ror
+    ror res_l
+    dex
+    bne !-
     ldx #5
 !:  lsr
     ror res_l
@@ -4877,8 +4865,10 @@ digit_rows: .fill digitRows.size(), digitRows.get(i)
 bubble_cols: .byte 7, 1, 3, 5
 bubble_dx:  .byte 256 - 6, 5, 256 - 2, 6, 0
 bubble_dy:  .byte 256 - 8, 256 - 10, 256 - 12, 256 - 9, 256 - 11
-sqr_lo:     .fill 512, <floor(i * i / 4)
-sqr_hi:     .fill 512, >floor(i * i / 4)
+// the guard sprites (8) and the bus (4, gfx_sprites.asm), unpacked to
+// GUARDSPR by gen_shift_ba
+.var guardPacked = rlePack(guardSpr)
+guard_rle:  .fill guardPacked.size(), guardPacked.get(i)
 park_chars: .fill 30, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
 kind6:      .byte 0, 6, 12, 18, 24
 kind_col:   .byte $ff, 1, 0, 0, 15  // stolen cab ($ff: its band's colour), white car, black cars, grey car
