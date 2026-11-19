@@ -1991,6 +1991,7 @@ gi_next:
     cpx #GARAGE0
     bcs gi_loop
     ldx t4
+sf_none:                            // (also safe_check: not driving or walking)
     rts
 
 // ---------------------------------------------------------------- the friend's house
@@ -2001,20 +2002,28 @@ gi_next:
 // timer gets 2 seconds shorter a level (at least JOB_MIN).
 safe_check:
     lda state
+    ldx #man_yl - car_yl            // on foot: under Vinnie (t5 not 0)
+    ldy #man_xl - car_xl
+    cmp #ST_WALK
+    beq sf_look
     cmp #ST_DRIVE
-    bne sf_out
+    bne sf_none
     jsr abs_speed                   // driving on: no need to look (unless
     lda t1                          // it was in the driveway)
     bne !+
     lda t0
     cmp #$20
-    bcc sf_look
+    bcc sf_car
 !:  lda safe_in
-    beq sf_rts
+    beq sf_none
+sf_car:
+    ldx #0                          // in the car: under the car
+    ldy #0
 sf_look:
-    lda car_yl                      // the map character under the car
+    stx t5
+    lda car_yl,x                    // the map character there
     sta t0
-    lda car_yh
+    lda car_yh,x
     lsr
     ror t0
     lsr
@@ -2022,9 +2031,9 @@ sf_look:
     lsr
     ror t0
     ldx t0
-    lda car_xl
+    lda car_xl,y
     sta t0
-    lda car_xh
+    lda car_xh,y
     lsr
     ror t0
     lsr
@@ -2038,12 +2047,15 @@ sf_look:
     lda class_tab,x
     and #CL_SAFE
     beq sf_out
+    lda t5                          // (on foot: walked in)
+    bne sf_in
     jsr abs_speed                   // stopped there
     lda t1
     bne sf_rts
     lda t0
     cmp #$20
     bcs sf_rts
+sf_in:
     lda safe_in                     // once each time
     bne sf_rts
     inc safe_in
@@ -2057,7 +2069,9 @@ sf_look:
     lda #W_COPS                     // not with the police after you
     ldx #7
     jmp show_msg
-!:  lda hot
+!:  lda t5                          // on foot, or in a clean car
+    bne sf_deliver
+    lda hot
     beq sf_deliver
     lda #0
     sta msg_next
@@ -2233,14 +2247,6 @@ cb_done:
     rts
 greet_t1:   .fill 14, greetCode(greetT1.charAt(i))
 greet_t2:   .fill 14, greetCode(greetT2.charAt(i))
-// msg_next = 1 if that was the last life
-last_life:
-    ldx #0
-    lda lives
-    bne !+
-    inx
-!:  stx msg_next
-    rts
 
 // the job timer runs while driving and walking
 job_frame:

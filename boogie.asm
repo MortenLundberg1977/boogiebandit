@@ -1516,7 +1516,8 @@ game_loop:
     jsr save_car
     jsr do_drive
     jsr paint_check
-    jsr safe_check
+gl_safe:
+    jsr safe_check                  // (driving or walking)
     lda state                       // a message at the friend's house: the
     cmp #ST_MSG                     // picture stands still under the bubble
     bne gl_world
@@ -1524,7 +1525,7 @@ game_loop:
 !:  cmp #ST_WALK
     bne !+
     jsr do_walk
-    jmp gl_world
+    jmp gl_safe
 !:  cmp #ST_ROB
     bne !+
     jsr do_rob
@@ -1616,6 +1617,29 @@ blk_at:
     tay
     lda class_tab,y
     and #1
+    rts
+// t0/t1 = |speed|
+abs_speed:
+    lda spd_l
+    sta t0
+    lda spd_h
+    sta t1
+    bpl !+
+    lda #0
+    sec
+    sbc t0
+    sta t0
+    lda #0
+    sbc t1
+    sta t1
+!:  rts
+// msg_next = 1 if that was the last life (chase.asm)
+last_life:
+    ldx #0
+    lda lives
+    bne !+
+    inx
+!:  stx msg_next
     rts
 .align 64
 wall_row:   .fill 32, WALLCH
@@ -2188,22 +2212,6 @@ dd_frame:
     lsr
     sta car_frame
     jmp do_skids
-
-// t0/t1 = |speed|
-abs_speed:
-    lda spd_l
-    sta t0
-    lda spd_h
-    sta t1
-    bpl !+
-    lda #0
-    sec
-    sbc t0
-    sta t0
-    lda #0
-    sbc t1
-    sta t1
-!:  rts
 
 // t0/t1 = |vx|, t2/t3 = |vy| (the car's velocity this frame)
 abs_vel:

@@ -20,7 +20,8 @@ for machines with a RAM Expansion Unit (a 1764/1750, or a Kung Fu Flash or
 emulator with its REU switched on): when Vinnie is busted, the front page of
 THE DAILY BOOGIE shows his lineup photo (until fire or SPACE), and every new
 job plays one of three driving tunes ("Getaway Groove", "Hot Asphalt",
-"Midnight Meter"), never the same twice in a row. A yellow REU badge on the title
+"Midnight Meter"), never the same twice in a row. Before a card shop job
+Vinnie ponders in a thought cloud which card to take. A yellow REU badge on the title
 picture shows that the REU was found. Without an REU it plays exactly like
 the standard one.
 
@@ -45,7 +46,8 @@ the standard one.
 - The loot only counts once it is at your friend's house, out in the green
   suburb at the south end of town (the yellow roof, bottom left; yellow on the
   city map). Stop in his driveway, but not in the getaway car (steal another
-  one or have it repainted first) and not with the police after you: SAFE!
+  one or have it repainted first), or walk up the driveway on foot; and not
+  with the police after you: SAFE!
   LEVEL UP! The loot goes
   to your score with a $1,000 x level bonus, and the police start gentle
   again. You can do several jobs before you go there, but the police get

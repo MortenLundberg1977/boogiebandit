@@ -32,7 +32,10 @@ a robbery becomes the getaway car (`hot` = 1); a stolen car is clean (`hot` =
 0). The friend's house is in the suburb (block (1, 15) of the grid in
 gfx_city.asm): a yellow roof (yellow on the city map) and a driveway down to
 the street (characters of class `CL_SAFE` = 16). Stop in the driveway with
-loot (`safe_check` in chase.asm, once each time in): during a chase "LOSE THE
+loot, or walk onto it (`safe_check` in chase.asm, run while driving and
+walking, `gl_safe` in the main loop; `t5` not 0 on foot: the character under
+Vinnie, no need to stop, and the getaway car does not matter; once each time
+in): during a chase "LOSE THE
 COPS!", in the getaway car "HOT CAR!", else first the friend's greeting, then
 "SAFE! LEVEL UP!". The greeting (`greet` in chase.asm) is a white bubble over
 his house, "AYY VINNIE! / HOW YOU DOIN'?", in a small blocky font with a grey
@@ -196,13 +199,16 @@ $a000-`extras_end` into REU address 0, and copies small entry points into
 page 1 under the stack (`p1_src` -> `REU_TITLE` = $0100, `REU_NEWS` = $0103:
 fetch the REU code into $c400 and jump to its badge or newspaper part;
 `REU_TUNE`); with no REU all become an `rts`, so the program plays as the
-standard one. The program itself only has the four `jsr`s (start,
-`show_picture`, `bust`, `music_play`). The standard `boogie.prg` stays byte
+standard one. The program itself only has five `jsr`s (start,
+`show_picture`, `bust`, `music_play`, `do_rob`). The standard `boogie.prg` stays byte
 for byte the same when REU code changes (compare the files).
-Now in the REU:
+Now in the REU (the load image from $a000 goes to REU 0; the `R_*` consts at
+the top of boogie.asm):
 - 0: the newspaper code (`news_ov`, assembled for `NEWS_OV` = $c400, screen B,
-  free while a bitmap page is shown), $0400: the newspaper page (bitmap 8000
-  bytes, screen 1024, colour RAM 1024; `gfx_news.asm` paints it at build time:
+  free while a bitmap page is shown); the newspaper page: screen and colour
+  RAM at `R_SCREEN`/`R_COLOUR` ($0400/$0800, 1024 each), the bitmap at
+  `R_BITMAP` ($8000; packed in the program as `news_rle`, unpacked to $e000
+  by `reu_init` and stashed from there); `gfx_news.asm` paints it at build time:
   THE DAILY BOOGIE, BUSTED!, a police lineup photo of Vinnie with his hands
   up next to an officer, columns of grey "text", EXTRA! in red; its own random
   numbers, so the city stays the same).
@@ -236,6 +242,30 @@ Now in the REU:
   `sei` (`p1_news`, `nv_get`). Page 1 code: $0100-$0174 (the stack was
   measured never to go below $01c0). Test: `p1_last`/`p1_cur` = $0173/$0174,
   `m_note` $30f (3 voices), poke `target` $4c for a new job.
+- Card shop thoughts (2.10.0, `gfx_think.asm`): the first three bubbles of a
+  card shop robbery (`bub_n` 0-2) are Vinnie's thoughts instead: a white cloud
+  (16 x 4 characters, scalloped edges) 9 rows over the door with two lines in
+  a 3 x 6 font with a drop shadow, and two circles trailing down to the door;
+  4 sets of 3 thoughts (`thTexts`, picked by `vbl`; `^ < >` are spade, heart,
+  diamond). `do_rob` calls `THINK_STUB` ($ff40, after the bitmap, up to the
+  vectors; copied by `reu_init`, `clc`/`rts` without an REU) before
+  `new_bubble`; carry set: a thought was shown, no comic bubble. The stub (for
+  `target` >= 16 and `bub_n` < 4) swaps COPSTORE ($0400-$06ff) into `R_SWAP`,
+  fetches the overlay (`th_ov`, assembled for `THINK_OV` = $0400, its RAM
+  image with its variables at `R_THINK`) and runs it; the overlay stashes its
+  image back, the stub fetches COPSTORE back. First thought: the overlay
+  saves the hidden screen's first page (`R_HID`) and uses it as a table of
+  the character codes on the shown screen (the camera stands still in a
+  robbery), takes the first `TH_NB` (46) codes not on it (`TH_CODES` in MMBUF
+  $0200, the text `TH_TXT` after them), stashes the whole charset to
+  `R_CSAVE` and fetches the glyphs (`R_TGLY`) into those codes. DMA to the
+  charset under the I/O area: the command is written with bit 4 clear and
+  started by a write to $ff00 with `$01` = $34 (`th_dma`). At `bub_n` 3 the
+  cloud and trail are cleared (`clear_bubble`, the trail as a 2-wide bubble at
+  `th_ty`) and the charset comes back; then the comic bubbles as usual.
+  `rng_next` is called once per thought, as `new_bubble` does, so the game's
+  random numbers stay the same. The first thought costs about two frames
+  (the screen scan); fps drops to 48 for that second.
 - Program space is as tight as in the standard edition (the REU code in the
   program is a few bytes: put new extras into the REU part, fetched into
   screen B or the bitmap area when they are used).
@@ -327,7 +357,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 30 bytes free: move tables into the `.align 64` padding before `wall_row` or into the packed city area). After it
+- `$0801-$7fxx` program + data (must stay below $8000; 18 bytes free, 4 in the REU edition; about 34 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`; or use the packed city area). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
@@ -338,7 +368,7 @@ into characters and de-duplicated.
   marker, title text, police, map dots; HUD digits written at run time),
   `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
   `$f800` police sprites 224-235 (after the B->A shift, which ends at $f771),
-  `$fb00` the guard sprites 236-243,
+  `$fb00` the guard sprites 236-243, `$fd00-$ff3f` free (sprites 244-252; overwritten by the bitmap pages, so re-made like the guard), `$ff40-$fff9` the REU edition's `THINK_STUB`,
   `$e000` bitmap for the title pages, game over and the city map (colours in
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
