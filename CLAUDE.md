@@ -216,6 +216,11 @@ Now in the REU:
 - Program space is as tight as in the standard edition (the REU code in the
   program is a few bytes: put new extras into the REU part, fetched into
   screen B or the bitmap area when they are used).
+- On the owner's Kung Fu Flash 2 the REU (1 MB, switched on in its settings, F5)
+  is only active for programs started from the SD card with RETURN (or a
+  mounted disk image), not for programs sent over USB: `build.bat reu` /
+  `sendreu` builds run there as the standard edition (no badge). Confirmed
+  2026-11-19: the badge shows when `boogie-reu.prg` is started from the SD card.
 - Test: `tools\vice.ps1 build\boogie-reu.prg "..." -Extra "-reu -reusize 512"`
   (without `-reu` it must play as the standard edition). A real LOAD of the
   50 KB file: a d64 with only `boogie reu` and `-Extra "-drive8truedrive -reu
