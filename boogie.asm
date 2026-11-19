@@ -33,13 +33,21 @@
 #if REU
 .const NEWS_OV = $c400              // the REU edition: the newspaper code runs in screen B
 .const R_NEWS_OV = 0                // REU addresses: its code, the page
-.const R_BITMAP = $0400
-.const R_SCREEN = R_BITMAP + 8000
+.const R_SCREEN = $0400
 .const R_COLOUR = R_SCREEN + 1024
 .const R_BADGE = R_COLOUR + 1024   // the title's REU badge: 40 bitmap bytes, 5 screen, 5 colour
 .const R_TUNE2 = R_BADGE + 50      // the driving tunes' blocks (TUNE_LEN bytes each;
                                     // R_TUNE1 in the gap after the newspaper code,
-                                    // R_TUNE0 stashed from the program at start)
+                                    // R_TUNE0 stashed from the program at start);
+                                    // then the thoughts' glyphs and texts
+.const R_BITMAP = $8000             // the page's bitmap (packed in the program, unpacked at start)
+.const R_TUNE0 = R_BITMAP + 8000    // "Getaway Groove", from the program
+.const R_THINK = $a400              // the thinking overlay (its RAM image, 3 pages)
+.const R_SWAP = R_THINK + $300      // what was in its place meanwhile
+.const R_CSAVE = R_SWAP + $300      // the charset while it borrows characters
+.const R_HID = R_CSAVE + $800       // a page of the hidden screen meanwhile
+.const THINK_OV = $0400             // the overlay runs over COPSTORE (swapped out meanwhile)
+.const THINK_STUB = $ff40           // its entry, after the bitmap (186 bytes up to the vectors)
 .const REU_TITLE = $0100            // page 1 (under the stack): fetch the REU code,
 .const REU_NEWS = $0103             // run its badge or newspaper part (rts without an REU);
                                     // REU_TUNE (a label in page 1): a new job, a new tune
@@ -3141,6 +3149,10 @@ do_rob:
     bne !+
     lda #BUBBLE_FRAMES
     sta bub_cd
+#if REU
+    jsr THINK_STUB                  // the REU edition: in a card shop Vinnie
+    bcs !+                          // ponders first (carry: a thought, no bubble)
+#endif
     jsr new_bubble
 !:  lda rob_l
     bne !+
@@ -4886,6 +4898,7 @@ init_end:
 // (reu_news is turned into an rts).
 #if REU
 #import "gfx_news.asm"
+#import "gfx_think.asm"
 .errorif init_end > $a000, "start-up data must end below $a000 in the REU edition too"
 * = $a000 "REU extras"
 extras:
@@ -4967,9 +4980,8 @@ news_ov_end:
 tune1_rec:
 .fill TUNE_LEN, tuneB1.get(i)
 .const R_TUNE1 = tune1_rec - extras
-.errorif * > extras + R_BITMAP, "the newspaper code and the first tune are too long"
-* = extras + R_BITMAP "REU extras: the newspaper"
-.fill 8000, newsBitmap.get(i)
+.errorif * > extras + R_SCREEN, "the newspaper code and the first tune are too long"
+* = extras + R_SCREEN "REU extras: the newspaper"
 .fill 1024, newsScreen.get(i)
 .fill 1024, newsColour.get(i)
 // the badge: "REU" in yellow on black, one row of 5 cells (01 black, 10 yellow)
@@ -4990,8 +5002,487 @@ tune1_rec:
 .errorif * != extras + R_TUNE2, "the REU extras' length is wrong"
 // "Midnight Meter"
 .fill TUNE_LEN, tuneB2.get(i)
+// the thoughts in a card shop (gfx_think.asm): glyphs, texts
+th_gly_rec:
+.fill TH_NB * 8, thinkGly.get(i)
+.const R_TGLY = th_gly_rec - extras
+th_txt_rec:
+.fill thinkTxt.size(), thinkTxt.get(i)
+.const R_TTXT = th_txt_rec - extras
 extras_end:
-.const R_TUNE0 = R_TUNE2 + TUNE_LEN     // "Getaway Groove", from the program
+.errorif extras_end - extras > R_BITMAP, "the REU extras run into the bitmap's place"
+// the newspaper's bitmap, packed (reu_init unpacks it to $e000 and stashes it)
+.var newsPacked = rlePack(newsBitmap)
+news_rle:   .fill newsPacked.size(), newsPacked.get(i)
+
+// ---------------------------------------------------------------- thinking
+// In a card shop the first three comic bubbles are Vinnie's thoughts (a
+// white cloud, gfx_think.asm). do_rob calls THINK_STUB instead of
+// new_bubble for them: it swaps this overlay into COPSTORE ($0400-$06ff,
+// only read when the city comes back from a bitmap page) and back; the
+// overlay's RAM image (its variables too) goes back into the REU each time.
+// The glyphs borrow character codes that are not on the shown screen (the
+// camera stands still during a robbery), their old shapes saved in the REU;
+// at the 4th bubble the cloud goes and the characters come back, and the
+// comic bubbles follow as in the standard edition. The game's random
+// numbers stay the same (rng_next once a thought, as new_bubble).
+.const TH_CODES = $0200             // MMBUF (free during a robbery): the borrowed codes,
+.const TH_TXT = TH_CODES + TH_NB    // the text shown
+.errorif TH_TXT + 28 > $0280, "MMBUF is too small for the thinking"
+th_ov_src:
+.pseudopc THINK_OV {
+th_ov:
+    lda bub_n
+    cmp #3
+    bcc th_think
+    lda th_on                       // the 4th: the thinking is over
+    cmp #1
+    bne !+
+    jsr th_clear                    // the cloud and the trail go,
+    lda #$91                        // the charset comes back
+    jsr th_cset
+!:  lda #0
+    sta th_on
+    clc                             // (new_bubble as usual)
+    bcc th_save
+th_think:
+    lda th_on
+    beq th_first
+    lsr                             // (2: not this time, no room: carry clear)
+    bcc th_save
+    jsr th_clear                    // the last thought goes
+    jmp th_go
+th_first:
+    jsr clear_bubble
+    jsr th_borrow
+    bcc !+
+    lda #2                          // too few free characters: no thinking
+    sta th_on
+    clc
+    bcc th_save
+!:  lda #1
+    sta th_on
+    lda vbl                         // one of the sets of thoughts
+    and #TH_SETS - 1
+    sta th_set
+th_go:
+    jsr rng_next                    // (as new_bubble)
+    inc bub_n
+    jsr th_draw
+    sec
+th_save:                            // the RAM image back into the REU
+    php
+    ldy #6
+    jsr th_regset
+    lda #$90
+    jsr th_dma
+    plp
+    rts
+
+// the cloud (bub_x/y/w are its) and the trail go
+th_clear:
+    jsr clear_bubble
+    lda th_tx
+    sta bub_x
+    lda th_ty
+    sta bub_y
+    lda #2
+    sta bub_w
+    lda #1
+    sta bub_on
+    jmp clear_bubble
+
+// TH_NB character codes that are not on the shown screen (carry clear), the
+// shapes there saved in the REU and the glyphs put in; carry set: too few
+th_borrow:
+    lda #$90                        // the first page of the hidden screen (not
+    jsr tb_hid                      // shown; the camera stands still) into the
+    lda #0                          // REU: it is the table meanwhile (zp0)
+    tay
+!:  sta (zp0),y
+    iny
+    bne !-
+    lda front_hi
+    sta tb_s0 + 2
+    clc
+    adc #1
+    sta tb_s1 + 2
+    adc #1
+    sta tb_s2 + 2
+    adc #1
+    sta tb_s3 + 2
+    lda #1
+    ldx #0
+tb_scan:
+tb_s0:
+    ldy $c000,x
+    sta (zp0),y
+tb_s1:
+    ldy $c100,x
+    sta (zp0),y
+tb_s2:
+    ldy $c200,x
+    sta (zp0),y
+tb_s3:
+    ldy $c300,x
+    sta (zp0),y
+    inx
+    bne tb_scan
+    ldx #0
+    ldy #1                          // (not character 0)
+!:  lda (zp0),y
+    bne tb_next
+    tya
+    sta TH_CODES,x
+    inx
+    cpx #TH_NB
+    beq tb_ok
+tb_next:
+    iny
+    bne !-
+    lda #$91                        // the page back
+    jsr tb_hid
+    sec
+    rts
+// a = REU command: the hidden screen's first page <-> R_HID (zp0 points at it)
+tb_hid:
+    pha
+    lda #0
+    sta zp0
+    sta th_regs
+    sta th_regs + 2
+    sta th_regs + 4
+    sta th_regs + 5
+    lda #1
+    sta th_regs + 6
+    lda #>R_HID
+    sta th_regs + 3
+    lda front_hi
+    eor #>(SCR_A ^ SCR_B)
+    sta th_regs + 1
+    sta zp0 + 1
+    pla
+    jmp th_dma
+tb_ok:
+    lda #$91                        // the page back
+    jsr tb_hid
+    lda #$90                        // the charset into the REU
+    jsr th_cset
+    lda #$91                        // the glyphs in
+    ldx #<R_TGLY
+    ldy #>R_TGLY
+    jsr th_chars
+    clc
+    rts
+
+// REU command a between the TH_NB borrowed characters (the charset under
+// the I/O area) and REU address y/x on, 8 bytes each
+th_chars:
+    sta th_cmd
+    stx th_regs + 2
+    sty th_regs + 3
+    lda #0
+    sta th_regs + 4
+    sta th_regs + 6
+    lda #8
+    sta th_regs + 5
+    sta th_n
+tc_loop:
+    ldx th_n
+    lda TH_CODES - 8,x
+    ldy #>CHARSET / 8
+    sty th_regs + 1
+    asl
+    rol th_regs + 1
+    asl
+    rol th_regs + 1
+    asl
+    rol th_regs + 1
+    sta th_regs
+    lda th_cmd
+    jsr th_dma
+    lda th_regs + 2
+    clc
+    adc #8
+    sta th_regs + 2
+    bcc !+
+    inc th_regs + 3
+!:  inc th_n
+    lda th_n
+    cmp #TH_NB + 8
+    bne tc_loop
+    rts
+
+// a = REU command: the whole charset <-> R_CSAVE
+th_cset:
+    ldx #<CHARSET
+    stx th_regs
+    ldx #>CHARSET
+    stx th_regs + 1
+    ldx #<R_CSAVE
+    stx th_regs + 2
+    ldx #>R_CSAVE
+    stx th_regs + 3
+    ldx #0
+    stx th_regs + 4
+    stx th_regs + 5
+    ldx #8
+    stx th_regs + 6
+    jmp th_dma
+// th_regs = the 7 bytes of th_tabs up to y
+th_regset:
+    ldx #6
+!:  lda th_tabs,y
+    sta th_regs,x
+    dey
+    dex
+    bpl !-
+    rts
+// REU command a ($90 stash, $91 fetch) with th_regs, the charset under the
+// I/O area visible: the command waits for a write to $ff00 (bit 4 clear),
+// done with the I/O area banked out
+th_dma:
+    php
+    sei
+    and #$ef
+    tay
+    ldx #6
+!:  lda th_regs,x
+    sta $df02,x
+    dex
+    bpl !-
+    sty $df01
+    lda #$34
+    sta $01
+    lda $ff00
+    sta $ff00                       // (the transfer)
+    lda #$35
+    sta $01
+    plp
+    rts
+
+// the thought (number th_set * 3 + bub_n - 1) over the door
+th_draw:
+    ldx target
+    lda door_xl,x                   // the door's column on the screen
+    sta t0
+    lda door_xh,x
+    jsr th_div8
+    sbc disp_cx
+    bpl !+
+    lda #0
+!:  cmp #39
+    bcc !+
+    lda #38
+!:  sta th_tx                       // the trail starts there
+    sec                             // the cloud: 16 wide, centred over it
+    sbc #8
+    bcs !+
+    lda #0
+!:  cmp #25
+    bcc !+
+    lda #24
+!:  sta bub_x
+    lda door_yl,x                   // ... and 9 rows above the door
+    sta t0
+    lda door_yh,x
+    jsr th_div8
+    sbc disp_cy
+    sec
+    sbc #9
+    bcs !+
+    lda #0
+!:  cmp #19
+    bcc !+
+    lda #18
+!:  sta bub_y
+    clc
+    adc #3
+    sta th_ty                       // (the trail is in the 4 rows from there)
+    lda #16
+    sta bub_w
+    lda #1                          // white
+    sta bub_col
+    sta bub_on
+    // its text from the REU (32 bytes a thought)
+    ldy #13
+    jsr th_regset
+    lda th_set
+    asl
+    adc th_set
+    adc bub_n                       // (1-12: the table starts 32 bytes early)
+    ldx #0
+    stx th_n
+    asl
+    asl
+    asl
+    asl
+    asl
+    rol th_n
+    adc th_regs + 2
+    sta th_regs + 2
+    lda th_n
+    adc th_regs + 3
+    sta th_regs + 3
+    lda #$91
+    jsr th_dma
+    ldx #0                          // the top
+    lda #0
+    jsr th_edge
+    ldx #0                          // the text
+    lda #1
+    jsr th_line
+    ldx #14
+    lda #2
+    jsr th_line
+    ldx #TH_BL - TH_TL              // the bottom
+    lda #3
+    jsr th_edge
+    // the trail down to the door: a circle, a smaller one
+    lda bub_x
+    pha
+    lda #1
+    sta bub_w
+    ldx th_tx
+    inx
+    stx bub_x
+    lda TH_CODES + TH_MED
+    sta tbuf
+    lda #4
+    jsr bubble_row
+    dec bub_x
+    lda TH_CODES + TH_SML
+    sta tbuf
+    lda #6
+    jsr bubble_row
+    pla
+    sta bub_x
+    lda #16
+    sta bub_w
+    rts
+// a = (a t0) / 8 - nothing: the high byte in a, low in t0; returns the
+// low byte of the result in a, carry set
+th_div8:
+    lsr
+    ror t0
+    lsr
+    ror t0
+    lsr
+    ror t0
+    lda t0
+    sec
+    rts
+// a cloud edge into row a: x = 0 the top, TH_BL the bottom
+th_edge:
+    pha
+    lda TH_CODES + TH_TL,x
+    sta tbuf
+    lda TH_CODES + TH_TR,x
+    sta tbuf + 15
+    ldy #13
+!:  lda TH_CODES + TH_TB,x
+    sta tbuf + 1,y
+    lda TH_CODES + TH_TA,x
+    sta tbuf,y
+    dey
+    dey
+    bpl !-
+    pla
+    jmp bubble_row
+// a line of text (TH_TXT from x) into row a
+th_line:
+    pha
+    lda TH_CODES + TH_L
+    sta tbuf
+    lda TH_CODES + TH_R
+    sta tbuf + 15
+    ldy #0
+!:  stx th_n
+    lda TH_TXT,x
+    tax
+    lda TH_CODES,x
+    sta tbuf + 1,y
+    ldx th_n
+    inx
+    iny
+    cpy #14
+    bne !-
+    pla
+    jmp bubble_row
+
+th_tabs:    .word THINK_OV, R_THINK     // + 6: the RAM image
+            .byte 0
+            .word $300
+            .word TH_TXT, R_TTXT - 32   // + 13: a text
+            .byte 0
+            .word 28
+th_regs:    .fill 7, 0
+th_on:      .byte 0                 // 1 thinking, 2 not this robbery (no room)
+th_set:     .byte 0
+th_tx:      .byte 0
+th_ty:      .byte 0
+th_cmd:     .byte 0
+th_n:       .byte 0
+th_ov_end:
+.errorif th_ov_end > THINK_OV + $300, "the thinking overlay is too long: " + toHexString(th_ov_end)
+}
+// THINK_STUB (copied after the bitmap by reu_init): in a card shop, for the
+// first 4 bubbles, swap the overlay in, run it, swap it out. Carry set: it
+// showed a thought (do_rob skips new_bubble).
+ts_src:
+.pseudopc THINK_STUB {
+ts_main:
+    lda target
+    cmp #16
+    bcc ts_no
+    lda bub_n
+    cmp #4
+    bcs ts_no
+    ldy #15                         // COPSTORE away
+    jsr ts_dma
+    ldy #7                          // the overlay in
+    jsr ts_dma
+    jsr th_ov
+    php
+    ldy #23                         // COPSTORE back
+    jsr ts_dma
+    plp
+    rts
+ts_no:
+    clc
+    rts
+// REU DMA: the 7 registers ts_tab[y-7..y-1], command ts_tab[y]
+ts_dma:
+    php
+    sei
+    lda ts_tab,y
+    pha
+    dey
+    ldx #6
+!:  lda ts_tab,y
+    sta $df02,x
+    dey
+    dex
+    bpl !-
+    pla
+    sta $df01
+    plp
+    rts
+ts_tab:     .word THINK_OV, R_THINK
+            .byte 0
+            .word $300
+            .byte $91
+            .word THINK_OV, R_SWAP
+            .byte 0
+            .word $300
+            .byte $90
+            .word THINK_OV, R_SWAP
+            .byte 0
+            .word $300
+            .byte $91
+ts_end:
+}
+.errorif ts_end > $fffa, "THINK_STUB runs into the vectors"
 // page 1 (copied there by reu_init): fetch the REU code into screen B and
 // run its badge (REU_TITLE) or newspaper (REU_NEWS) part; and REU_TUNE
 p1_src:
@@ -5051,7 +5542,7 @@ REU_TUNE:
 !:  rts
 p1_dma:     .word NEWS_OV, R_NEWS_OV
             .byte 0
-            .word R_BITMAP
+            .word R_SCREEN
 p1_tdma:    .word TUNE_BLK, 0
             .byte 0
             .word TUNE_LEN
@@ -5090,7 +5581,16 @@ reu_init:
     lda reu_tb
     cmp #$a5
     bne ri_none
-    ldy #13                         // the extras, then "Getaway Groove"
+    lda #<news_rle                  // the newspaper's bitmap, unpacked
+    sta zsrc
+    lda #>news_rle
+    sta zsrc + 1
+    lda #<BITMAP
+    sta zdst
+    lda #>BITMAP
+    sta zdst + 1
+    jsr unpack
+    ldy #27                         // the extras, the tune, the bitmap, the thinking
 !:  ldx #6
 !:  lda ri_all,y
     sta $df02,x
@@ -5106,24 +5606,39 @@ reu_init:
     sta REU_TITLE,x
     dex
     bpl !-
+    ldx #ts_end - ts_main - 1      // the thinking's entry
+!:  lda ts_src,x
+    sta THINK_STUB,x
+    dex
+    bpl !-
     rts
 ri_none:
-    lda #$60                        // no REU: no badge, no newspaper, one tune
-    sta REU_TITLE
+    lda #$60                        // no REU: no badge, no newspaper, one tune,
+    sta REU_TITLE                   // no thinking
     sta REU_NEWS
     sta REU_TUNE
+    sta THINK_STUB + 1
+    lda #$18                        // (clc: new_bubble as usual)
+    sta THINK_STUB
     rts
 reu_tb:     .byte 0
 ri_test:    .word reu_tb, $fff0
             .byte 0
             .word 1
-ri_all:     .word TUNE_BLK, R_TUNE0     // (the last block is stashed first)
+ri_all:     .word th_ov_src, R_THINK    // (the last block is stashed first)
+            .byte 0
+            .word th_ov_end - th_ov
+            .word BITMAP, R_BITMAP
+            .byte 0
+            .word 8000
+            .word TUNE_BLK, R_TUNE0
             .byte 0
             .word TUNE_LEN
             .word extras, 0
             .byte 0
             .word extras_end - extras
-.errorif R_TUNE0 + TUNE_LEN > $fff0, "the REU test byte is in the way"
+.errorif R_TUNE0 + TUNE_LEN > R_THINK, "Getaway Groove runs into the thinking overlay"
+.errorif R_HID + $100 > $fff0, "the REU test byte is in the way"
 .errorif * > $d000, "the REU extras must end below $d000: " + toHexString(*)
 .print "REU extras: $a000-$" + toHexString(*)
 #endif
