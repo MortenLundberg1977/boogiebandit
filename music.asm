@@ -174,6 +174,60 @@
 .var cord1 = order("R", 0)
 .var cord2 = order("cM1 cM2 cM1 cM2 cM3 cM3 cM4 cM5", 0)
 .var cord3 = order("cE1 cE2 cE1 cE2 cC cC cD cX", 0)
+.var FIRST_NEW = patterns.size()
+
+#if REU
+// ---------------------------------------------------------------- two more driving tunes (REU edition)
+// Same style, instruments and speed as "Getaway Groove": an intro, then 16
+// bars (the hook twice, stabs, long brass). They wait in the REU; at every
+// new job one of the three is fetched over the tune block (see the player
+// data below). They share the drums and the rest pattern with the first one
+// (those keep their pattern numbers, so the chase tune's "R" still works).
+//
+// "Hot Asphalt" (D minor: Dm Bb C A, the stabs over Gm Gm Dm A)
+.eval pat("xD", I_BASS, "D2 - D3 D2 - D3 C3 - D2 - D3 F3 - D3 C3 A2")
+.eval pat("xBb", I_BASS, "A#1 - A#2 A#1 - A#2 A2 - A#1 - A#2 D3 - A#2 A2 F2")
+.eval pat("xC", I_BASS, "C2 - C3 C2 - C3 A#2 - C2 - C3 E3 - C3 A#2 G2")
+.eval pat("xA", I_BASS, "A1 - A2 A1 - A2 G2 - A1 - A2 C#3 - E3 C#3 A2")
+.eval pat("xG", I_BASS, "G1 - G2 G1 - G2 F2 - G1 - G2 A#2 - G2 F2 D2")
+.eval pat("xL1", I_LEAD, "A4 - A4 C5 - D5 . . F5 . E5 D5 - C5 . .")
+.eval pat("xL2", I_LEAD, "D5 - D5 C5 - A#4 . . A4 . . G4 - F4 . .")
+.eval pat("xL3", I_LEAD, "E4 - E4 G4 - C5 . . E5 . D5 C5 - A#4 . .")
+.eval pat("xL4", I_LEAD, "C#5 . . . E5 . . . A4 . . . - . . .")
+.eval pat("xS1", I_STAB, "A#4 - - A#4 - - A4 - G4 - - A#4 - D5 - -")
+.eval pat("xS2", I_STAB, "D5 - - D5 - - C5 - A#4 - - G4 - - - -")
+.eval pat("xS3", I_STAB, "F5 - - F5 - - E5 - D5 - - A4 - F5 - -")
+.eval pat("xS4", I_LEAD, "E5 . . . C#5 . . . E5 . G5 . A5 . . .")
+.eval pat("xC1", I_LEAD, "F5 . . . . . E5 . D5 . A4 . D5 . F5 .")
+.eval pat("xC2", I_LEAD, "F5 . . . . . D5 . A#4 . F4 . A#4 . D5 .")
+.eval pat("xC3", I_LEAD, "E5 . . . . . G5 . E5 . C5 . G4 . C5 .")
+.eval pat("xC4", I_LEAD, "C#5 . . . E5 . . . A5 . . . G5 . E5 C#5")
+.var xord1 = order("xD xD  xD xBb xC xA  xD xBb xC xA  xG xG xD xA  xD xBb xC xA", 2)
+.var xord2 = order("R R    xL1 xL2 xL3 xL4  xL1 xL2 xL3 xL4  xS1 xS2 xS3 xS4  xC1 xC2 xC3 xC4", 2)
+.var xord3 = order("dI dI  dA dA dA dB  dA dA dA dB  dA dA dA dB  dA dA dA dB", 2)
+// "Midnight Meter" (G minor: Gm Eb F D, the stabs over Cm Cm Gm D; the bass
+// pumps eighths with octave jumps)
+.eval pat("yG", I_BASS, "G1 G2 - G2 G1 G2 - F2 G1 G2 - G2 A#2 G2 F2 D2")
+.eval pat("yEb", I_BASS, "D#1 D#2 - D#2 D#1 D#2 - D2 D#1 D#2 - D#2 G2 D#2 D2 A#1")
+.eval pat("yF", I_BASS, "F1 F2 - F2 F1 F2 - D#2 F1 F2 - F2 A2 F2 D#2 C2")
+.eval pat("yD", I_BASS, "D1 D2 - D2 D1 D2 - C2 D1 D2 - D2 F#2 A2 F#2 D2")
+.eval pat("yC", I_BASS, "C2 C3 - C3 C2 C3 - A#2 C2 C3 - C3 D#3 C3 A#2 G2")
+.eval pat("yL1", I_LEAD, "G4 . A#4 . D5 . . C5 . A#4 . A4 . G4 . .")
+.eval pat("yL2", I_LEAD, "G4 . . . A#4 . G4 . D#4 . . . - . . .")
+.eval pat("yL3", I_LEAD, "A4 . C5 . F5 . . D#5 . D5 . C5 . A4 . .")
+.eval pat("yL4", I_LEAD, "F#4 . . . A4 . . . C5 . . . D5 . C5 A4")
+.eval pat("yS1", I_STAB, "G5 - G5 - - D#5 - - G5 - - A#5 - G5 - -")
+.eval pat("yS2", I_STAB, "F5 - F5 - - D#5 - - C5 - - D#5 - - - -")
+.eval pat("yS3", I_STAB, "D5 - D5 - - A#4 - - G4 - - A#4 - D5 - -")
+.eval pat("yS4", I_LEAD, "F#5 . . . A5 . . . D5 . . . F#5 . A5 .")
+.eval pat("yC1", I_LEAD, "D5 . . . . . A#4 . C5 . D5 . F5 . D5 .")
+.eval pat("yC2", I_LEAD, "D#5 . . . . . D5 . C5 . A#4 . G4 . A#4 .")
+.eval pat("yC3", I_LEAD, "C5 . . . . . A4 . F4 . A4 . C5 . F5 .")
+.eval pat("yC4", I_LEAD, "F#5 . . . . . D5 . A4 . . . F#4 . A4 C5")
+.var yord1 = order("yG yG  yG yEb yF yD  yG yEb yF yD  yC yC yG yD  yG yEb yF yD", 2)
+.var yord2 = order("R R    yL1 yL2 yL3 yL4  yL1 yL2 yL3 yL4  yS1 yS2 yS3 yS4  yC1 yC2 yC3 yC4", 2)
+.var yord3 = order("dI dI  dA dA dA dB  dA dA dA dB  dA dA dA dB  dA dA dA dB", 2)
+#endif
 
 // ---------------------------------------------------------------- player code
 music_init:
@@ -251,7 +305,10 @@ m_load_pattern:                     // x = voice: next pattern from the order li
     rts
 
 music_play:
-    ldy #SPEED                      // a chase: the chase tune, faster
+#if REU
+    jsr REU_TUNE                    // the REU edition: a new job, a new tune
+#endif
+    ldy #SPEED                     // a chase: the chase tune, faster
     lda chase
     beq !+
     ldy #SPEED_CHASE
@@ -539,11 +596,13 @@ sidoff: .byte 0, 7, 14
 .const CORD1 = MUSSTORE
 .const CORD2 = CORD1 + cord1.size()
 .const CORD3 = CORD2 + cord2.size()
+#if !REU
 ord_lo: .byte <ord1_data, <ord2_data, <ord3_data, <CORD1, <CORD2, <CORD3
 ord_hi: .byte >ord1_data, >ord2_data, >ord3_data, >CORD1, >CORD2, >CORD3
 ord1_data: .fill ord1.size(), ord1.get(i)
 ord2_data: .fill ord2.size(), ord2.get(i)
 ord3_data: .fill ord3.size(), ord3.get(i)
+#endif
 ins_wave: .fill insWave.size(), insWave.get(i)
 ins_ad:   .fill insAD.size(), insAD.get(i)
 ins_sr:   .fill insSR.size(), insSR.get(i)
@@ -564,11 +623,16 @@ freq_hi: .fill 96, >freqReg(i)
 .var patAll = List()
 // chase patterns go to MUSSTORE while they fit, the rest into the program
 .var patStored = List()
-.for (var p = 0; p < patterns.size(); p++) {
+.for (var p = 0; p < FIRST_NEW; p++) {
     .if (p >= FIRST_CHASE && musStore.size() + patterns.get(p).size() <= 256) {
         .eval patStored.add(true)
         .eval patOffs.add(MUSSTORE + musStore.size())
         .for (var i = 0; i < patterns.get(p).size(); i++) .eval musStore.add(patterns.get(p).get(i))
+#if REU
+    } else .if (p < FIRST_CHASE) {
+        .eval patStored.add(false)          // (the REU edition: in the tune block)
+        .eval patOffs.add(0)
+#endif
     } else {
         .eval patStored.add(false)
         .eval patOffs.add(patAll.size())
@@ -578,5 +642,105 @@ freq_hi: .fill 96, >freqReg(i)
 .errorif musStore.size() > 256, "the chase tune's order lists are too long for MUSSTORE: " + musStore.size()
 .print "Chase tune: " + musStore.size() + " bytes at MUSSTORE"
 pat_data: .fill patAll.size(), patAll.get(i)
+#if !REU
 pat_lo: .fill patterns.size(), patStored.get(i) ? <patOffs.get(i) : <(pat_data + patOffs.get(i))
 pat_hi: .fill patterns.size(), patStored.get(i) ? >patOffs.get(i) : >(pat_data + patOffs.get(i))
+#else
+// The REU edition: the driving tune is a block the REU can replace in one go
+// (TUNE_BLK, TUNE_LEN bytes): the order list and pattern pointers, then the
+// tune's order lists and patterns. REU_TUNE (page 1, see boogie.asm) fetches
+// another tune's block over it at each new job. The chase tune's pointers
+// are the same in every block. A tune uses at most FIRST_CHASE patterns
+// (slots); patterns it shares with "Getaway Groove" keep their numbers.
+.function tuneSlots(o1, o2, o3) {           // [slot -> pattern, o1, o2, o3 renumbered]
+    .var slotPat = List()
+    .for (var s = 0; s < FIRST_CHASE; s++) .eval slotPat.add(-1)
+    .var map = Hashtable()
+    .var rIdx = patNames.get("R")           // the chase tune's voice 1 uses it
+    .eval map.put(rIdx, rIdx)
+    .eval slotPat.set(rIdx, rIdx)
+    .var ords = List().add(o1, o2, o3)
+    .for (var pass = 0; pass < 2; pass++) {
+        .for (var k = 0; k < 3; k++) {
+            .var o = ords.get(k)
+            .for (var i = 0; i < o.size() - 2; i++) {
+                .var g = o.get(i)
+                .if (!map.containsKey(g)) {
+                    .if (pass == 0 && g < FIRST_CHASE) {
+                        .eval map.put(g, g)
+                        .eval slotPat.set(g, g)
+                    }
+                    .if (pass == 1) {
+                        .var f = 0
+                        .while (slotPat.get(f) >= 0) {
+                            .eval f = f + 1
+                            .errorif f >= FIRST_CHASE, "a tune has more than " + FIRST_CHASE + " patterns"
+                        }
+                        .eval map.put(g, f)
+                        .eval slotPat.set(f, g)
+                    }
+                }
+            }
+        }
+    }
+    .var out = List().add(slotPat)
+    .for (var k = 0; k < 3; k++) {
+        .var o = ords.get(k)
+        .var r = List()
+        .for (var i = 0; i < o.size() - 2; i++) .eval r.add(map.get(o.get(i)))
+        .eval r.add($fe)
+        .eval r.add(o.get(o.size() - 1))
+        .eval out.add(r)
+    }
+    .return out
+}
+.function tuneBlock(addr, t, padTo) {      // t = tuneSlots(...): the block's bytes
+    .var area = addr + 12 + 2 * FIRST_NEW
+    .var ab = List()
+    .var oa = List()
+    .var rIdx = patNames.get("R")           // "R" first: at the same address in
+    .var rAddr = area                       // every tune, so a tune can change
+    .for (var i = 0; i < patterns.get(rIdx).size(); i++) .eval ab.add(patterns.get(rIdx).get(i))
+    .for (var k = 1; k < 4; k++) {          // during a chase
+        .eval oa.add(area + ab.size())
+        .for (var i = 0; i < t.get(k).size(); i++) .eval ab.add(t.get(k).get(i))
+    }
+    .eval oa.add(CORD1)
+    .eval oa.add(CORD2)
+    .eval oa.add(CORD3)
+    .var pa = List()
+    .for (var s = 0; s < FIRST_CHASE; s++) {
+        .eval pa.add(area)
+        .var g = t.get(0).get(s)
+        .if (s == rIdx) .eval pa.set(s, rAddr)
+        .if (g >= 0 && s != rIdx) {
+            .eval pa.set(s, area + ab.size())
+            .for (var i = 0; i < patterns.get(g).size(); i++) .eval ab.add(patterns.get(g).get(i))
+        }
+    }
+    .for (var p = FIRST_CHASE; p < FIRST_NEW; p++) .eval pa.add(patStored.get(p) ? patOffs.get(p) : pat_data + patOffs.get(p))
+    .errorif padTo > 0 && ab.size() > padTo, "a tune is " + (ab.size() - padTo) + " bytes longer than Getaway Groove"
+    .var out = List()
+    .for (var i = 0; i < 6; i++) .eval out.add(<oa.get(i))
+    .for (var i = 0; i < 6; i++) .eval out.add(>oa.get(i))
+    .for (var i = 0; i < FIRST_NEW; i++) .eval out.add(<pa.get(i))
+    .for (var i = 0; i < FIRST_NEW; i++) .eval out.add(>pa.get(i))
+    .for (var i = 0; i < ab.size(); i++) .eval out.add(ab.get(i))
+    .for (var i = ab.size(); i < padTo; i++) .eval out.add(0)
+    .return out
+}
+.var tune0 = tuneSlots(ord1, ord2, ord3)
+.var TUNE_AREA = tuneBlock(0, tune0, 0).size() - 12 - 2 * FIRST_NEW
+TUNE_BLK:
+ord_lo:
+.var tuneB0 = tuneBlock(TUNE_BLK, tune0, TUNE_AREA)
+.fill tuneB0.size(), tuneB0.get(i)
+.label ord_hi = ord_lo + 6
+.label pat_lo = ord_lo + 12
+.label pat_hi = pat_lo + FIRST_NEW
+.var TUNE_LEN = tuneB0.size()
+// the other two, for the REU (boogie.asm puts them into the extras)
+.var tuneB1 = tuneBlock(TUNE_BLK, tuneSlots(xord1, xord2, xord3), TUNE_AREA)
+.var tuneB2 = tuneBlock(TUNE_BLK, tuneSlots(yord1, yord2, yord3), TUNE_AREA)
+.print "Tune block: " + TUNE_LEN + " bytes at $" + toHexString(TUNE_BLK) + " (tunes: " + (tuneB0.size()) + ")"
+#endif

@@ -192,11 +192,13 @@ release has both .prg files. The REU edition's extras are assembled at $a000
 (after the start-up data; a LOAD may fill RAM up to $cfff, never $d000, the
 I/O area): at start (`start`, before anything is unpacked over them)
 `reu_init` checks for an REU (a byte stashed and fetched back) and stashes
-$a000-`EXTRA_LEN` into REU address 0, and copies two small entry points into
+$a000-`extras_end` into REU address 0, and copies small entry points into
 page 1 under the stack (`p1_src` -> `REU_TITLE` = $0100, `REU_NEWS` = $0103:
-fetch the REU code into $c400 and jump to its badge or newspaper part); with
-no REU both become an `rts`, so the program plays as the standard one. The
-program itself only has the three `jsr`s (start, `show_picture`, `bust`).
+fetch the REU code into $c400 and jump to its badge or newspaper part;
+`REU_TUNE`); with no REU all become an `rts`, so the program plays as the
+standard one. The program itself only has the four `jsr`s (start,
+`show_picture`, `bust`, `music_play`). The standard `boogie.prg` stays byte
+for byte the same when REU code changes (compare the files).
 Now in the REU:
 - 0: the newspaper code (`news_ov`, assembled for `NEWS_OV` = $c400, screen B,
   free while a bitmap page is shown), $0400: the newspaper page (bitmap 8000
@@ -210,9 +212,30 @@ Now in the REU:
   that the REU works.
 - `bust` calls `REU_NEWS` (chase.asm): fetch the code to $c400 and run it: it
   fetches the page into $e000/$c000/$d800 (REU DMA; colour RAM is written
-  through the I/O area), shows it on white paper for 4 s or until fire, and
+  through the I/O area), shows it on white paper until fire or SPACE
+  (`key_map` is cleared, so SPACE does not open the city map too), and
   goes back to the streets through `sm_exit` (as from the city map). Then
   BUSTED! as usual.
+- Three driving tunes (2.9.0): "Getaway Groove", "Hot Asphalt" (D minor) and
+  "Midnight Meter" (G minor; `xord*`/`yord*` and patterns `x*`/`y*` in
+  music.asm, REU build only). In the REU build the driving tune is one block
+  in the program, `TUNE_BLK` (`TUNE_LEN` = 712 bytes: `ord_lo`/`ord_hi`,
+  `pat_lo`/`pat_hi`, then the tune's order lists and patterns; built by
+  `tuneSlots`/`tuneBlock`). A tune may use at most 21 patterns (slots) and
+  no more bytes than "Getaway Groove" (build errors say so); patterns shared
+  with it keep their numbers, and "R" is first in the block, at the same
+  address in every tune, since the chase tune's voice 1 plays it. The chase
+  pointers are the same in all blocks. REU: `R_TUNE1` in the gap after the
+  newspaper code, `R_TUNE2` after the badge, `R_TUNE0` stashed from the
+  program by `reu_init`. `music_play` calls `REU_TUNE` (page 1, in the IRQ)
+  every frame: when `target` changed (a robbery, TOO SLOW!, a new game; once
+  on the title too) it fetches one of the other two tunes at random (`vbl`
+  bit 0, not the game's `rng`: `p1_cur` + 1 or + 2) over the block and
+  restarts song 0, unless the chase tune plays (it then starts after the
+  chase). Since the IRQ uses the REU, the other REU code does its DMA with
+  `sei` (`p1_news`, `nv_get`). Page 1 code: $0100-$0174 (the stack was
+  measured never to go below $01c0). Test: `p1_last`/`p1_cur` = $0173/$0174,
+  `m_note` $30f (3 voices), poke `target` $4c for a new job.
 - Program space is as tight as in the standard edition (the REU code in the
   program is a few bytes: put new extras into the REU part, fetched into
   screen B or the bitmap area when they are used).

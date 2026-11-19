@@ -18,7 +18,9 @@ the latest version; older ones on the [Releases](https://github.com/MortenLundbe
 also on the disk image (`LOAD"BOOGIE REU",8`). The same game, plus extras
 for machines with a RAM Expansion Unit (a 1764/1750, or a Kung Fu Flash or
 emulator with its REU switched on): when Vinnie is busted, the front page of
-THE DAILY BOOGIE shows his lineup photo. A yellow REU badge on the title
+THE DAILY BOOGIE shows his lineup photo (until fire or SPACE), and every new
+job plays one of three driving tunes ("Getaway Groove", "Hot Asphalt",
+"Midnight Meter"), never the same twice in a row. A yellow REU badge on the title
 picture shows that the REU was found. Without an REU it plays exactly like
 the standard one.
 

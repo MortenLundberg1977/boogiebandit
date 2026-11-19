@@ -37,9 +37,12 @@
 .const R_SCREEN = R_BITMAP + 8000
 .const R_COLOUR = R_SCREEN + 1024
 .const R_BADGE = R_COLOUR + 1024   // the title's REU badge: 40 bitmap bytes, 5 screen, 5 colour
-.const EXTRA_LEN = R_BADGE + 50
+.const R_TUNE2 = R_BADGE + 50      // the driving tunes' blocks (TUNE_LEN bytes each;
+                                    // R_TUNE1 in the gap after the newspaper code,
+                                    // R_TUNE0 stashed from the program at start)
 .const REU_TITLE = $0100            // page 1 (under the stack): fetch the REU code,
-.const REU_NEWS = $0103             // run its badge or newspaper part (rts without an REU)
+.const REU_NEWS = $0103             // run its badge or newspaper part (rts without an REU);
+                                    // REU_TUNE (a label in page 1): a new job, a new tune
 #endif
 .const SPRHI = $d800
 .const BITMAP = $e000
@@ -4911,21 +4914,22 @@ nv_main:
     sta $d021
     lda #11
     sta $d020
-    lda #200                        // 4 seconds, or fire
-    sta nv_t
-!:  jsr wait_frame
+!:  jsr wait_frame                 // until fire or SPACE
     jsr read_input
     lda joy_new
     and #$10
-    bne !+
-    dec nv_t
-    bne !-
-!:  lda #0
+    ora key_map
+    beq !-
+    lda #0
+    sta key_map                     // (SPACE must not open the city map too)
     sta $d020
     jmp sm_exit                     // back to the streets (as from the city map)
-nv_t:   .byte 0
-// REU -> C64: the blocks of nv_dma from index y down to nv_stop + 1
+// REU -> C64: the blocks of nv_dma from index y down to nv_stop + 1 (with
+// interrupts off: the IRQ's REU_TUNE uses the REU too)
 nv_get:
+    php
+    sei
+nv_get1:
     ldx #6
 !:  lda nv_dma,y
     sta $df02,x
@@ -4935,7 +4939,8 @@ nv_get:
     lda #$91
     sta $df01
     cpy nv_stop
-    bne nv_get
+    bne nv_get1
+    plp
     rts
 nv_stop: .byte 0
 nv_dma: .word $d800, R_COLOUR       // (the last block is taken first)
@@ -4958,7 +4963,11 @@ nv_dma: .word $d800, R_COLOUR       // (the last block is taken first)
         .word 40
 news_ov_end:
 }
-.errorif news_ov_end - news_ov > R_BITMAP, "the newspaper code is too long"
+// "Hot Asphalt" in the gap up to the page
+tune1_rec:
+.fill TUNE_LEN, tuneB1.get(i)
+.const R_TUNE1 = tune1_rec - extras
+.errorif * > extras + R_BITMAP, "the newspaper code and the first tune are too long"
 * = extras + R_BITMAP "REU extras: the newspaper"
 .fill 8000, newsBitmap.get(i)
 .fill 1024, newsScreen.get(i)
@@ -4978,9 +4987,13 @@ news_ov_end:
 .fill 40, badgeBits.get(i)
 .fill 5, $07
 .fill 5, 0
-.errorif * != extras + EXTRA_LEN, "the REU extras' length is wrong"
+.errorif * != extras + R_TUNE2, "the REU extras' length is wrong"
+// "Midnight Meter"
+.fill TUNE_LEN, tuneB2.get(i)
+extras_end:
+.const R_TUNE0 = R_TUNE2 + TUNE_LEN     // "Getaway Groove", from the program
 // page 1 (copied there by reu_init): fetch the REU code into screen B and
-// run its badge (REU_TITLE) or newspaper (REU_NEWS) part
+// run its badge (REU_TITLE) or newspaper (REU_NEWS) part; and REU_TUNE
 p1_src:
 .pseudopc REU_TITLE {
 p1_title:
@@ -4989,6 +5002,8 @@ p1_title:
 p1_news:
     lda #<NEWS_OV
     sta p1_jmp + 1
+    php                             // (REU_TUNE in the IRQ uses the REU too)
+    sei
     ldx #6
 !:  lda p1_dma,x
     sta $df02,x
@@ -4996,15 +5011,59 @@ p1_news:
     bpl !-
     lda #$91
     sta $df01
+    plp
 p1_jmp:
     jmp NEWS_OV
+// Called by music_play (in the IRQ at line 250) every frame: when there is
+// a new job (target changed: after a robbery, TOO SLOW!, a new game), fetch
+// one of the other two driving tunes (at random) over the tune block
+// (TUNE_BLK in music.asm) and start it, unless the chase tune is playing
+// (then the new one starts after the chase). The game's rng is not touched.
+REU_TUNE:
+    lda target
+    cmp p1_last
+    bne !+
+    rts
+!:  sta p1_last
+    lda vbl                         // + 1 or + 2 (mod 3)
+    and #1
+    sec
+    adc p1_cur
+    cmp #3
+    bcc !+
+    sbc #3
+!:  sta p1_cur
+    tax
+    lda p1_rlo,x
+    sta p1_tdma + 2
+    lda p1_rhi,x
+    sta p1_tdma + 3
+    ldx #6
+!:  lda p1_tdma,x
+    sta $df02,x
+    dex
+    bpl !-
+    lda #$91
+    sta $df01
+    lda m_song
+    bne !+
+    jmp music_song                  // (song 0 from the top)
+!:  rts
 p1_dma:     .word NEWS_OV, R_NEWS_OV
             .byte 0
             .word R_BITMAP
+p1_tdma:    .word TUNE_BLK, 0
+            .byte 0
+            .word TUNE_LEN
+p1_rlo:     .byte <R_TUNE0, <R_TUNE1, <R_TUNE2
+p1_rhi:     .byte >R_TUNE0, >R_TUNE1, >R_TUNE2
+p1_last:    .byte $ff               // the target the tune was picked for
+p1_cur:     .byte 0                 // the tune in the block
 p1_end:
 }
 .errorif p1_news != REU_NEWS, "REU_NEWS must be p1_news"
-.errorif p1_end - p1_title > 64, "the page 1 code is too long"
+.errorif p1_end - p1_title > 128, "the page 1 code is too long"
+.print "Page 1 code: $0100-$" + toHexString(p1_end - 1)
 // run once at start (before anything is unpacked over this): is there an
 // REU? then the extras go into it
 reu_init:
@@ -5031,13 +5090,17 @@ reu_init:
     lda reu_tb
     cmp #$a5
     bne ri_none
-    ldx #6
-!:  lda ri_all,x
+    ldy #13                         // the extras, then "Getaway Groove"
+!:  ldx #6
+!:  lda ri_all,y
     sta $df02,x
+    dey
     dex
     bpl !-
     lda #$90
     sta $df01
+    tya
+    bpl !--
     ldx #p1_end - p1_title - 1     // the page 1 code
 !:  lda p1_src,x
     sta REU_TITLE,x
@@ -5045,17 +5108,22 @@ reu_init:
     bpl !-
     rts
 ri_none:
-    lda #$60                        // no REU: no badge, no newspaper
+    lda #$60                        // no REU: no badge, no newspaper, one tune
     sta REU_TITLE
     sta REU_NEWS
+    sta REU_TUNE
     rts
 reu_tb:     .byte 0
 ri_test:    .word reu_tb, $fff0
             .byte 0
             .word 1
-ri_all:     .word extras, 0
+ri_all:     .word TUNE_BLK, R_TUNE0     // (the last block is stashed first)
             .byte 0
-            .word EXTRA_LEN
+            .word TUNE_LEN
+            .word extras, 0
+            .byte 0
+            .word extras_end - extras
+.errorif R_TUNE0 + TUNE_LEN > $fff0, "the REU test byte is in the way"
 .errorif * > $d000, "the REU extras must end below $d000: " + toHexString(*)
 .print "REU extras: $a000-$" + toHexString(*)
 #endif
