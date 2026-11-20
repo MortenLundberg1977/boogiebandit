@@ -68,15 +68,19 @@
     "kcccccccccck",
     ".kcccccccck.",
     "..wwwwwwww..")
+// 32 headings of 11.25 degrees: the even ones (SP_CAR + 0-15, the cabs use
+// them too), then the odd ones 1-15 (SP_CAR + 16-23); 17-31 are those turned
+// around, made at run time (car_spr, mir_late in the tail).
 .var sprHi = List()
-.for (var f = 0; f < 16; f++) {
-    .var d = rotSprite(carArt, f * 22.5)
+.for (var f = 0; f < 24; f++) {
+    .var d = rotSprite(carArt, (f < 16) ? f * 22.5 : (f - 16) * 22.5 + 11.25)
     .for (var i = 0; i < 64; i++) .eval sprHi.add(d.get(i))
 }
 
 // ---------------------------------------------------------------- arrow to the bank
-// A yellow arrow on a black dial with a white rim, 16 directions.
-.for (var f = 0; f < 16; f++) {
+// A yellow arrow on a black dial with a white rim, 16 directions: 0-7 here,
+// 8-15 are them turned around, made at run time (arr_spr in the tail).
+.for (var f = 0; f < 8; f++) {
     .var a = f * PI / 8
     .var ca = cos(a)
     .var sa = sin(a)
@@ -395,7 +399,7 @@
 .const SP_MARK = 51
 .const SP_PRESS = 53
 .const SP_CAR = 96
-.const SP_ARROW = 112
+.const SP_ARROW = 120              // 0-7 (8-15: arr_spr)
 .const SP_TIME = 56
 .const SP_LIVES = 57
 .const SP_COP = 58              // + direction 0-3 (N E S W)

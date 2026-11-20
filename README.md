@@ -93,7 +93,7 @@ the standard one.
 | D | raster time bar in the border (CPU time of each frame) |
 
 Floor it from a standstill or slide through a corner and you leave rubber on
-the road.
+the road. The car turns smoothly, in 32 directions.
 
 ## Building
 

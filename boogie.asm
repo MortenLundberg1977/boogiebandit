@@ -58,8 +58,13 @@
 .const COPSTORE = $0400          // their copy, 12 sprites (the bitmap screens overwrite $f800)
 .const GUARDSPR = $fb00           // the guard sprites 236-243 (copied from guard_spr)
 .const SP_GUARD = 236             // + dir*2 + step
+.const CARMIR = 222               // 222/223 ($f780): the car's headings 17-31 (tail: car_spr)
+.const ARRMIR = 252               // $ff00: the arrow's directions 8-15 (arr_spr)
+.const REVT = $fe00               // pixel reversing table for those (mir_init)
+.const MIR_LATE = 156 - 48          // turn one around only if the frame took less (perf, 2 lines; it takes up to 35)
 .const MUSSTORE = $0700          // the chase tune (music.asm), 256 bytes
-.const TAIL_PAGES = 7            // the tables moved out of the program (see tail_src)
+.const TAIL_SIZE = 1857           // the tables moved out of the program (see tail_src), exactly
+.const TAIL_PAGES = ceil(TAIL_SIZE / 256)
 .const TEMP = $e000               // where they wait during start-up
 .const BLOCKS = $8000            // the city block designs (512 bytes each), then
 .const PRIV = BLOCKS + NBLOCKS * 512   // NPRIV private copies, then the grid
@@ -1569,7 +1574,7 @@ gl_sprites:
     sta $d020
 !:  lda #1
     sta frame_ready
-    jmp game_loop
+    jmp mir_late                    // (tail: then game_loop)
 
 // the B->A screen shift lives at $e000 (where the title picture was), the
 // police car's 16 directions at $f800 after it
@@ -1593,6 +1598,7 @@ gen_shift_ba:
     lda #>GUARDSPR
     sta zdst + 1
     jsr unpack
+    jsr mir_init                    // (car and arrow turned around: tail)
     lda #<shift_ba
     sta zdst
     lda #>shift_ba
@@ -4369,9 +4375,7 @@ ps_bus:
 ps_car:
     ldx #5
     jsr spr_pos
-    lda car_frame
-    clc
-    adc #SP_CAR
+    jsr car_spr                     // (32 headings)
     sta sh_ptr + 5
 ps_nocar:
     // the bandit (sprite 4)
@@ -4507,8 +4511,7 @@ pa_go:
     sbc py_h
     sta ay_h
     jsr direction16
-    clc
-    adc #SP_ARROW
+    jsr arr_spr
     sta sh_ptr + 3
     jmp place_npcs
 
@@ -4866,7 +4869,7 @@ hd_common:
 .for (var i = 0; i < greetGlyphs.size(); i++) .eval blockBytes.add(greetGlyphs.get(i))   // GREET_GLY
 .errorif GREET_GLY + greetGlyphs.size() > $c000, "the city area tables must end below $c000: " + toHexString(GREET_GLY + greetGlyphs.size())
 .var mapPacked = rlePack(blockBytes)
-.const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_PAGES * 256)
+.const MAP_AREA = max(mapPacked.size(), 6001 + TAIL_SIZE)
 map_rle:    .fill MAP_AREA, (i < mapPacked.size()) ? mapPacked.get(i) : 0
 .var bmpPacked = rlePack(introBitmap)
 intro_bitmap: .fill bmpPacked.size(), bmpPacked.get(i)
@@ -4920,13 +4923,172 @@ guard_rle:  .fill guardPacked.size(), guardPacked.get(i)
 park_chars: .fill 30, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
 kind6:      .byte 0, 6, 12, 18, 24
 kind_col:   .byte $ff, 1, 0, 0, 15  // stolen cab ($ff: its band's colour), white car, black cars, grey car
+
+// ---- 32 car headings, 16 arrow directions from half as many sprites
+// A sprite turned around (180 degrees) is the same car or arrow pointing the
+// other way: the car's odd headings 17-31 are 1-15 turned around (in sprites
+// 222/223, one for every other one, so the one on screen is never rewritten),
+// the arrow's 8-15 are 0-7 turned around (in sprite 252). That is done at the
+// end of the main loop when the frame has time left (mir_late); until then the
+// car shows the heading before it. REVT reverses the four pixels of a byte.
+// The three sprites and REVT are in the bitmap's area, so gen_shift_ba makes
+// REVT again and forgets what the sprites held (mir_init).
+mir_init:
+    ldx #0
+    stx REVT
+!:  txa                             // REVT[x] = REVT[x / 4] / 4 + (x & 3) * 64
+    lsr
+    lsr
+    tay
+    lda REVT,y
+    lsr
+    lsr
+    sta t1
+    txa
+    lsr
+    ror
+    ror
+    and #$c0
+    ora t1
+    sta REVT,x
+    inx
+    bne !-
+    dex                             // ($ff: nothing made yet)
+    stx car_last
+    stx arr_last
+    rts
+// a = the car's sprite pointer
+car_spr:
+    lda hdg
+    clc
+    adc #4
+    lsr
+    lsr
+    lsr
+    lsr                             // a = heading / 2, carry = odd
+    bcs !+
+    adc #SP_CAR
+    rts
+!:  cmp #8
+    bcs !+
+    adc #SP_CAR + 16                // (carry clear)
+    rts
+!:  tay                             // 17-31: 1-15 turned around
+    and #1
+    ora #CARMIR
+    cpy car_last
+    bne cs_new
+    cmp mir_dst
+    bne cs_rts                      // (made)
+    beq cs_old
+cs_new:
+    ldx mir_dst
+    bne cs_old                      // (another one waits)
+    sty car_last
+    sta mir_dst
+    tya
+    clc
+    adc #SP_CAR + 8
+    sta mir_src
+cs_old:
+    tya                             // until then the heading before it
+    clc
+    adc #SP_CAR
+cs_rts:
+    rts
+// a = the arrow's direction 0-15 -> its sprite pointer
+arr_spr:
+    cmp #8
+    bcs !+
+    adc #SP_ARROW
+    rts
+!:  cmp arr_last
+    bne as_new
+    lda #ARRMIR
+    cmp mir_dst
+    bne as_rts                      // (made)
+as_old:
+    lda sh_ptr + 3                  // until then the one before
+as_rts:
+    rts
+as_new:
+    ldx mir_dst
+    bne as_old
+    sta arr_last
+    and #7
+    clc
+    adc #SP_ARROW
+    sta mir_src
+    lda #ARRMIR
+    sta mir_dst
+    bne as_old
+// At the end of the main loop, when there is time left in the frame:
+// sprite mir_src turned around into mir_dst.
+mir_late:
+    ldx mir_dst
+    beq ml_done
+    lda perf
+    cmp #MIR_LATE
+    bcs ml_done
+    txa
+    ldx #zdst
+    jsr spr_addr
+    lda mir_src
+    ldx #zsrc
+    jsr spr_addr
+    ldy #62
+ml_byte:
+    sei                             // (the source may be under the I/O area)
+    lda #$34
+    sta $01
+    lda (zsrc),y
+    ldx #$35
+    stx $01
+    cli
+    tax
+    lda REVT,x
+    pha
+    sty t4
+    tya
+    eor #$ff
+    clc
+    adc #63                         // (62 - y)
+    tay
+    pla
+    sta (zdst),y
+    ldy t4
+    dey
+    bpl ml_byte
+    lda #0
+    sta mir_dst
+    jsr perf_sample                 // (counted in the frame's time)
+ml_done:
+    jmp game_loop
+// the address of sprite a to the zero page pointer at x
+spr_addr:
+    pha
+    lsr
+    lsr
+    ora #$c0
+    sta 1,x
+    pla
+    ror
+    ror
+    ror
+    and #$c0
+    sta 0,x
+    rts
+mir_src:    .byte 0
+mir_dst:    .byte 0                 // 0: nothing to do
+car_last:   .byte $ff
+arr_last:   .byte $ff
 tail_end:
 }
 
-.print "Tables moved out of the program: " + (tail_end - tail_start) + " bytes"
+.print "Tables moved out of the program: " + (tail_end - tail_start) + " bytes" + ", room " + (intro_bitmap - TAIL)
 
+.errorif tail_end - tail_start != TAIL_SIZE || mod(TAIL_SIZE, 256) == 0, "set TAIL_SIZE to " + (tail_end - tail_start)
 .errorif tail_end - tail_start > intro_bitmap - TAIL, "the moved tables do not fit after the A->B shift"
-.errorif tail_end - tail_start <= (TAIL_PAGES - 1) * 256 || tail_end - tail_start > TAIL_PAGES * 256, "set TAIL_PAGES to " + ceil((tail_end - tail_start) / 256)
 init_end:
 
 .print "City: " + NBLOCKS + " block designs, packed " + mapPacked.size() + " bytes (area " + MAP_AREA + "), title: " + (bmpPacked.size() + scrPacked.size() + colPacked.size())
