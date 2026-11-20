@@ -79,6 +79,14 @@ the standard one.
   hijack it: walk up to it and press fire. It is slower than a car, but it
   is not the getaway car.
 - On foot you can't walk through cars, cabs or the bus.
+- Saving (when the game was started from the disk, e.g. the .d64 on a Kung
+  Fu Flash or a real 1541): the high score table is saved to the disk
+  whenever someone makes it, and loaded at start. Press F1 while playing: the
+  city map opens and the game is saved (score, hearts and level; the job
+  under way and the loot you carry are not), GAME SAVED in the corner, or NOT
+  SAVED without a disk. On the title pages F1 continues the saved game
+  ("F1 CONTINUES SAVED GAME" above the table), starting with a fresh job.
+  Both editions use the same file, BOOGIE SAVE.
 
 ## Controls (joystick in port 2)
 
@@ -88,12 +96,13 @@ the standard one.
 | Left / right | steer (on foot: walk) |
 | Fire | get out of the car (nearly stopped), get back in (next to it), steal a parked car (next to it) |
 | SPACE | city map (fire or SPACE to drive on) |
+| F1 | save the game (on the title: continue the saved game) |
 | M | music on / off |
 | A | the arrow: next job / friend's house / nearest paint garage |
 | D | raster time bar in the border (CPU time of each frame) |
 
 Floor it from a standstill or slide through a corner and you leave rubber on
-the road.
+the road. The car turns smoothly, in 32 directions.
 
 ## Building
 

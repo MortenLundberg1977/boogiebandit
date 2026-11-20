@@ -151,6 +151,8 @@ disk_io:
     sta $00,x
     inx
     bne !-
+    sta $02a1                       // (the KERNAL waits while this RS-232 flag is set:
+                                    // here it is br_left, made anew by every band_rows)
     jsr dk_swap
     lda #$36                        // the KERNAL in, BASIC out
     sta $01

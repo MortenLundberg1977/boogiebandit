@@ -345,20 +345,21 @@ the top of boogie.asm):
   part of a screenshot. Always look at the screenshots.
 - Test hooks (zero page, check `build\boogie.sym` after changes):
   `joy_ovr` $1d (OR'ed into joystick 2: 1 up 2 down 4 left 8 right $10 fire),
-  `key_ovr` $ba (keys: $20 SPACE, $10 M, $04 D, $02 A; poke, then 00 again),
+  `key_ovr` $bb (keys: $40 F1, $20 SPACE, $10 M, $04 D, $02 A; poke, then 00 again),
   `fps_val` $17 (frames shown in the last 50 raster frames, $32 = 50),
   `perf` $84 / `perf_max` $85 (main loop time in raster lines / 2 counted from
   the IRQ at line 250; 156 = a whole frame), `n_cross` $b8 / `n_hold` $b9
   (character crossings / the ones the scroll did not predict),
   `state` $21 (0 drive, 1 walk, 2 robbery, 3 message), `target` $4c,
-  `score` $57 (BCD, lowest byte first), `lives` $91, `wanted` $92, `chase` $93,
+  `score` $57 (BCD, lowest byte first), `lives` $5a, `level` $5b (score,
+  lives, level in a row: the saved game), `wanted` $92, `chase` $93,
   `job_time` $94 (BCD seconds), `n_type` $3a1 (5 slots: 1 police, 2 cab,
   3 officer, 4 police that lost the trail, 5 roadblock; then x low/high,
   y low/high, direction, 5 bytes each), `jobs` $d4 (poke 2 before a robbery
   for shooting and roadblocks), `officer` $d7, `bul_t` $da, `car_col` $e1,
   `have_car` $e8, `loot` $e9, `steal_pos` $f0, `m_speed` $f1, `m_song` $f6,
   `n_next`/`n_prev`/`n_rot` $3d3/$3d8/$3dd, `foot_col` $3e2 (`n_type` 6 = a guard on foot; `target`: 0-15 banks,
-  16-31 card shops), `hot` $3e7, `carry_l`/`carry_h` $3e8/$3e9, `level` $3ea,
+  16-31 card shops), `hot` $3e7, `carry_l`/`carry_h` $3e8/$3e9,
   `safe_in` $3eb, `paint_lock` $3ec, `arrow_mode` $3ed, `priv_gi` $3ee (4),
   `sh_gline`/`lv_gline` $f7/$f8 (1: the suburb fills the screen)
   (check addresses in `build\boogie.sym` after changes; the door table
@@ -383,7 +384,7 @@ the top of boogie.asm):
 | `music.asm` | SID player (register shadow, patterns as text) + the tune "Getaway Groove" + sound effects on voice 3 |
 | `gfx_lib.asm` | build-time helpers: random, 4x7 font, 3x5 HUD font, RLE packer |
 | `gfx_city.asm` | build-time: multicolor charset, the city blocks and their grid, banks, paint garages (spray booth chars have class `CL_PAINT` = 8), comic bubble characters, map colours, skid-mark tables |
-| `gfx_sprites.asm` | build-time: car (16 rotations), arrow dial (16), bandit (4 dirs x 2 steps, with/without bag), marker, HUD boxes, title text, police car (4), map dots |
+| `gfx_sprites.asm` | build-time: car (24 of its 32 headings), arrow dial (8 of 16), bandit (4 dirs x 2 steps, with/without bag), marker, HUD boxes, title text, police car (4), map dots |
 | `gfx_intro.asm` | build-time: the title picture (multicolor bitmap; the green lady with the torch on the right, `ladyArt`, is drawn before the skyline so the buildings hide her feet) |
 | `version.asm` | the version shown on the title picture |
 
@@ -394,35 +395,65 @@ into characters and de-duplicated.
 
 ## Memory map
 
+- `$0100-$0174` the REU edition's page 1 code (see "REU edition"),
+  `$0180-$01bf` `DISK_CODE` (both editions: `dk_name`, `read_f1`, `title_f1`,
+  `hs_save`, copied there by `k_snap`); the stack stays above $01e0 (measured
+  in VICE: chase, map, saving, game over), keep $01c0-$01ff for it.
 - `$0200-$027f` the city map screen's row buffer (`MMBUF`), `$0280-$02ff` working
-  bytes (`b2alloc`: map_at, draw_row/col, try_steal), `$0300-$03ff` arrays
-  (music, sprite shadows, police/cab slots).
+  bytes (`b2alloc`: map_at, draw_row/col, try_steal; `kvec` = the KERNAL
+  vectors $0314-$0333 from start-up and the device, `DISK2` = `dk_swap` and
+  the file name: page 2 is full), `$0300-$03ff` arrays
+  (music, sprite shadows, police/cab slots). `$02a1` must be a scratch byte
+  (`br_left`, an assert checks): `disk_io` zeroes it, the KERNAL's serial
+  routines wait while that RS-232 flag is set.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 100 bytes free since 2.12.0, 14 fewer in the REU edition: check "Program ends" in the build output; about 15 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`, `abs_speed`; big tables only used once the game runs belong in the tail, see below). After it
-  the packed charset and sprites (only needed at start-up, may reach past
-  $8000: they are unpacked before the map is).
+- `$0801-$7fxx` program + data (must stay below $8000; about 70 bytes free since 2.14.0, 14 fewer in the REU edition: check "Program ends" in the build output; about 15 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`, `abs_speed`; big tables only used once the game runs belong in the tail, see below). After it
+  the start-up data: `start_up` (everything `start` does before the map is
+  unpacked: it runs in place, the map goes over it afterwards), `k_snap`, the
+  packed charset and sprites (unpacked before the map is). It must end below
+  $a000 (about 60 bytes left, 45 in the REU edition).
+- Texts on bitmap pages: `Print(col, row, colour, "TEXT")` is `jsr pr_in`
+  followed by the three bytes and the glyphs (6 bytes plus the text).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
   (512 bytes each, unpacked at start-up), `PRIV` 4 private copies, `GRID`
   (9 x 17), the `map_at` tables `MT_CB`/`MT_CY`/`MT_RG`/`MT_RH`/`MT_RL`
   (256 bytes each, packed with the blocks), then the dancers (`DANCE_SRC`), `GRID_ORIG`, `MM_CODE` (the city map's character codes), the comic bubble glyphs (`WORD_GLYPHS`, `GL_TL`-`GL_BR`) and the greeting font (`GREET_GLY`): full up to $bff9.
 - VIC bank 3: `$c000`/`$c400` screens A/B, `$c800` sprites 32-63 (HUD, bandit,
   marker, title text, police, map dots; HUD digits written at run time),
-  `$d000` charset and `$d800` sprites 96-127 (car, arrow) under the I/O area,
-  `$f800` police sprites 224-235 (after the B->A shift, which ends at $f771),
-  `$fb00` the guard sprites 236-243 and the bus 244-247 (`SP_BUS`, N E S W, to `$fdff`; one packed block `guard_rle` in the tail, unpacked by `gen_shift_ba`), `$fe00-$ff3f` free (sprites 248-252; overwritten by the bitmap pages, so re-made like the guard), `$ff40-$fff9` the REU edition's `THINK_STUB`,
+  `$d000` charset and `$d800` sprites 96-127 (car 96-119, arrow 120-127) under the I/O area,
+  `$f780` the car's turned-around headings (`CARMIR` 222/223, after the B->A shift, which ends at $f771),
+  `$f800` police sprites 224-235,
+  `$fb00` the guard sprites 236-243 and the bus 244-247 (`SP_BUS`, N E S W, to `$fdff`; one packed block `guard_rle` in the tail, unpacked by `gen_shift_ba`), `$fe00` `REVT` and `$ff00` the arrow's turned-around picture (`ARRMIR` 252; both re-made after the bitmap pages, see "How a frame works"), `$ff40-$fff9` the REU edition's `THINK_STUB`,
   `$e000` bitmap for the title pages, game over and the city map (colours in
   screen A).
 - The unrolled screen shift routines are generated at run time: A→B over the
-  packed city blocks (`map_rle`, `MAP_AREA` = at least 6001 bytes + `TAIL_PAGES`
-  pages, padded: only needed at start-up), and after it the 1,620 bytes of (7 pages; parked cars are found by searching `park_chars` with `park_find`, no 256-byte table; `mul_speed` multiplies by shift and add, no square tables)
+  packed city blocks (`map_rle`, `MAP_AREA` = at least 6001 bytes + `TAIL_SIZE`,
+  only needed at start-up), and after it the 1,857 bytes of (`TAIL_SIZE`, exact: no page padding since 2.13.0; it holds code too, e.g. `car_spr`, `mir_late`; parked cars are found by searching `park_chars` with `park_find`, no 256-byte table; `mul_speed` multiplies by shift and add, no square tables)
   tables (`sin_tab` to `kind_col`, `guard_rle` among them: `tail_src` in the start-up data,
   assembled for `TAIL` = `map_rle` + 6001, parked at $e000 during start-up
-  and copied there once the blocks are unpacked; `TAIL_PAGES`, asserts check
-  it); B→A at `$e000`, generated again every time the city comes back from a
+  and copied there once the blocks are unpacked; set `TAIL_SIZE` to what the
+  assert says); B→A at `$e000`, generated again every time the city comes back from a
   bitmap screen (`gen_shift_ba`).
 - KERNAL and BASIC are banked out (`$01=$35`), IRQ/NMI vectors at `$fffe/$fffa`.
+- Saving (`disk_io`, screens.asm; a = 0 load, else save; carry set = failed):
+  the file BOOGIE SAVE is `hs_names` up to `sv_end` (the high score table and
+  `sv_blk`: score, lives, level; level 0 = no saved game), loaded at start-up
+  with secondary address 0 to `hs_names` (so the program may move), saved
+  after scratching the old one (`dk_save`, in the tail). Only on bitmap pages:
+  the raster IRQ is switched off, the game's zero page $80-$ff goes to
+  `KSAVE` ($c580-$c5ff, screen B) and is zeroed for the KERNAL, `kvec` is
+  swapped with $0314-$0333 (the vectors as the game found them, so a
+  cartridge's disk emulation, e.g. the Kung Fu Flash's, keeps its hooks),
+  `$01=$36`. The device is the one the game was loaded from (8 if that was
+  below 8). F1 while driving/walking opens the city map (`key_map` $40) and
+  `map_save` saves there (GAME SAVED / NOT SAVED in the top row); F1 on the
+  title pages (`title_f1`) sets `sv_go`, `game_start` then takes the saved
+  score, lives and level (`cont_apply`); a new high score is saved after the
+  name (`hs_save`). In VICE the virtual drive (traps) saves to a PC folder
+  when no disk image is attached; `-drive8type 0 +busdevice8 +trapdevice8`
+  tests "no drive".
 - Zero page `$02-$bx` is the game's (allocated with `zalloc`).
 
 ## The city
@@ -524,7 +555,26 @@ circle from 16 pixels before to 16 after it, turning in 16 steps
 A U-turn turns on the spot in 8 steps (`n_rot`). Only the picture curves:
 the real position (for collisions) stays on the centre lines, at most about
 5 pixels away. Police use 16 sprites (4 at $c800, 12 at $f800: `cop_ptr`),
-cabs the getaway car's 16.
+cabs the getaway car's 16 even headings.
+
+The getaway car is drawn in 32 headings of 11.25 degrees (since 2.13.0; the
+physics still has `hdg` 0-255, `car_frame` stays 0-15 for skid marks,
+getting out and the bus): `car_spr` (tail) picks the sprite from `hdg`. The
+even headings are `SP_CAR` + 0-15, the odd ones 1-15 `SP_CAR` + 16-23, and
+17-31 are 1-15 turned around by 180 degrees (a rotated sprite turned around
+is the car pointing the other way), made at run time into `CARMIR` 222/223
+($f780, alternating, so the sprite on screen is never rewritten). The arrow
+keeps 0-7 (`SP_ARROW` = 120), 8-15 are those turned around into `ARRMIR` 252
+($ff00). Turning around reads the source under the I/O area (3 instructions
+with `$01=$34` and interrupts held per byte) and reverses the pixels with
+`REVT` ($fe00, 256 bytes); it costs up to 35 `perf` units, so `mir_late`
+runs it at the end of the main loop (after `frame_ready`), only when `perf`
+< `MIR_LATE` (156 - 48), one job at a time (`mir_src`/`mir_dst`); until then
+the car shows the heading before it, the arrow its last picture.
+`gen_shift_ba` calls `mir_init` (rebuilds `REVT`, forgets `car_last`/`arr_last`)
+because the bitmap screens overwrite all of it. Test hooks: `mir_dst`,
+`car_last`, `arr_last` (tail, see `build\boogie.sym`). Measured with 2 cabs
+and hard turning: `perf_max` $8c, main before it $85-$90.
 
 Measured before the block city (3 police cars, 2 cabs, skid marks, hard turning):
 `perf_max` ≈ $8a = 138 of 156; plain driving ≈ $6b; 2 police cars, an
@@ -543,6 +593,6 @@ officer shooting and a roadblock ≈ $83.
 ## Ideas on the list
 
 More block designs (31 fit; characters are the limit: none left); a minimap in the HUD
-(the full map is on SPACE); saving the high scores to disk. A park or river
+(the full map is on SPACE). A park or river
 needs green/blue like the suburb: only as a horizontal band (a raster split
 like `irq_green`), since colour RAM is one value per screen row.
