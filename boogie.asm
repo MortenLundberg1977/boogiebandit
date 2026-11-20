@@ -127,6 +127,7 @@
 .const BUS_SLOT = 3              // the cab in this slot is a city bus (slower, longer)
 .const BUS_SPEED = 72            // 1.1
 .const BUS_WAIT = 100            // 2 seconds at a stop
+.const BUS_MAX = $0200           // hijacked, it does 2 pixels a frame (the car 3)
 .const BUS_COL = 6               // its stripes: blue
 .const BUS_Y = mod((BLK_Y0 + BUS_ROW) * 8 + 4 + 1024, 128)   // its stops: y mod 128 (gfx_city.asm)
 .const COP_SPEED = 100           // 1.6, + 12 for each bank robbed (at most COP_MAX)
@@ -374,6 +375,7 @@
 .label lv_xexp = zalloc(1)
 .label lv_yexp = zalloc(1)
 .label have_car = zalloc(1)      // 0 after an arrest: the police took the car
+.label is_bus = zalloc(1)        // 1: his vehicle is a hijacked city bus
 .label loot = zalloc(1)          // the last job's loot, BCD hundreds
 .label st_col = zalloc(1)        // a parked car: top left character, kind
 .label st_row = zalloc(1)
@@ -1420,6 +1422,8 @@ game_start:
     lda #1
     sta have_car
     sta st_scr
+    lsr                             // (0) his own car, not a bus
+    sta is_bus
     lda vbl                         // the first bank: from how long the
     eor rng                         // title was shown
     and #NBANKS - 1
@@ -1872,15 +1876,17 @@ dd_acc:
     lda spd_h
     adc #0
     sta spd_h
-    cmp #>MAXSPD
+    ldy is_bus                      // (a bus does 2 pixels a frame)
+    cmp max_spd,y
     bcs !+
     jmp dd_drift
 !:
-    lda #>MAXSPD
+    lda max_spd,y
     sta spd_h
     lda #<MAXSPD
     sta spd_l
     jmp dd_drift
+max_spd:    .byte >MAXSPD, >BUS_MAX
 dd_noup:
     lda #0
     sta burn
@@ -2746,8 +2752,11 @@ do_walk:
     jsr sfx_play
     rts
 dw_steal:
+    jsr try_bus                     // next to a bus at its stop: take it
+    bcs dw_took
     jsr try_steal                   // or next to a parked car: steal it
     bcc dw_move
+dw_took:
     rts
 dw_move:
     lda #3
@@ -2979,13 +2988,23 @@ ts_found:                           // a = $80 + kind * 8 + row * 2 + column
     lda car_yh
     adc #0
     sta car_yh
+    lda #0                          // a car, facing north
+    sta is_bus
+// (try_bus too: a = the heading) in it, standing
+ts_take:
+    sta hdg
+    sta mang
+    clc
+    adc #8
+    lsr
+    lsr
+    lsr
+    lsr
+    sta car_frame
     lda #0
     sta car_xf
     sta car_yf
-    sta hdg
     sta hdg_f
-    sta mang
-    sta car_frame
     sta spd_l
     sta spd_h
     sta vx_l
@@ -3078,7 +3097,7 @@ man_try_x:                          // a = +1 / -1
     sta by_l
     lda man_yh
     sta by_h
-    jsr box_blocked
+    jsr man_box
     bne !+
     lda bx_l
     sta man_xl
@@ -3101,7 +3120,7 @@ man_try_y:
     sta bx_l
     lda man_xh
     sta bx_h
-    jsr box_blocked
+    jsr man_box
     bne !+
     lda by_l
     sta man_yl
@@ -4319,6 +4338,35 @@ place_sprites:
     sta t4
     lda #44
     sta t5
+    lda is_bus                      // a hijacked bus: 4 directions, expanded
+    beq ps_car
+    lda car_frame
+    clc
+    adc #2
+    lsr
+    lsr
+    and #3
+    pha
+    lsr
+    bcc !+
+    lda #7                          // east / west
+    sta t4
+    lda #$20
+    sta sh_xexp
+    bne ps_bus
+!:  lda #33                         // north / south
+    sta t5
+    lda #$20
+    sta sh_yexp
+ps_bus:
+    ldx #5
+    jsr spr_pos
+    pla
+    clc
+    adc #SP_BUS
+    sta sh_ptr + 5
+    jmp ps_nocar
+ps_car:
     ldx #5
     jsr spr_pos
     lda car_frame

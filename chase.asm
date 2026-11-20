@@ -186,6 +186,12 @@ no_rts:
     lda #1
     sta car_hit
 nc_wait:
+    cpx #BUS_SLOT                   // the bus at its stop just waits (people
+    bne !+                          // get on: no horn, no turning around)
+    lda bus_t
+    beq !+
+    rts
+!:
     lda #0
     sta n_cur,x
     inc n_wait,x
@@ -1969,6 +1975,187 @@ clean_car:
     lda #1
     sta arrow_mode
 !:  rts
+
+// ---------------------------------------------------------------- walking into vehicles
+// Vinnie's walking box at bx/by (man_try_x/y): not 0 (and a = 1) if the city
+// blocks it or a vehicle stands there (police cars, the roadblock, cabs, the
+// bus, his own car or bus) that he is not already in (then he may move, so
+// he never gets stuck when one drives into him or he gets out).
+man_box:
+    jsr box_blocked
+    bne mb_rts
+    lda t3                          // (dw_move's: npc_delta uses it)
+    pha
+    ldx #3                          // where he is now
+!:  lda man_xl,x
+    sta tgt_xl,x
+    dex
+    bpl !-
+    jsr veh_test
+    bcs mb_free
+    lda bx_l                        // where he wants to go
+    sta tgt_xl
+    lda bx_h
+    sta tgt_xh
+    lda by_l
+    sta tgt_yl
+    lda by_h
+    sta tgt_yh
+    jsr veh_test
+    pla
+    sta t3
+    bcc mb_ok
+    lda #1
+    rts
+mb_free:
+    pla
+    sta t3
+mb_ok:
+    lda #0
+mb_rts:
+    rts
+// carry set if tgt is inside a vehicle (13 along it, 10 across; the bus and
+// the roadblock 25 along)
+veh_test:
+    ldx #NNPC - 1
+vt_loop:
+    lda n_type,x
+    beq vt_next
+    cmp #NT_OFF                     // (people)
+    beq vt_next
+    cmp #NT_FOOT
+    beq vt_next
+    jsr npc_delta
+    lda #13
+    ldy n_type,x
+    cpy #NT_BLOCK
+    beq vt_long
+    cpx #BUS_SLOT
+    bne vt_len
+    cpy #NT_CAB
+    bne vt_len
+vt_long:
+    lda #25
+vt_len:
+    ldy n_dir,x
+    jsr vt_box
+    bcs vt_rts
+vt_next:
+    dex
+    bpl vt_loop
+    lda have_car                    // his own car or bus
+    beq vt_rts                      // (carry clear)
+    lda tgt_xl
+    sec
+    sbc car_xl
+    sta nax_l
+    lda tgt_xh
+    sbc car_xh
+    sta nax_h
+    lda tgt_yl
+    sec
+    sbc car_yl
+    sta nay_l
+    lda tgt_yh
+    sbc car_yh
+    sta nay_h
+    ldx #0
+    jsr vt_abs
+    ldx #2
+    jsr vt_abs
+    lda car_frame                   // (its direction, 0-3)
+    clc
+    adc #2
+    lsr
+    lsr
+    and #3
+    tay
+    lda #13
+    ldx is_bus
+    beq vt_box
+    lda #25
+// carry set if nax/nay are within a along direction y (0-3), 10 across
+vt_box:
+    sta t0
+    lda #10
+    sta t1
+    tya
+    lsr
+    bcs !+                          // east / west: along is x
+    ldy t0
+    lda t1
+    sta t0
+    sty t1
+!:  lda nax_h
+    bne vt_out
+    lda nax_l
+    cmp t0
+    bcs vt_out
+    lda nay_h
+    bne vt_out
+    lda nay_l
+    cmp t1
+    bcs vt_out
+    sec
+    rts
+vt_out:
+    clc
+vt_rts:
+    rts
+// nax (x = 0) or nay (x = 2) made positive
+vt_abs:
+    lda nax_h,x
+    bpl !+
+    lda #0
+    sec
+    sbc nax_l,x
+    sta nax_l,x
+    lda #0
+    sbc nax_h,x
+    sta nax_h,x
+!:  rts
+
+// ---------------------------------------------------------------- hijacking the bus
+// On foot, fire next to the bus while it stands at a stop: Vinnie takes it
+// (like a stolen car: not the getaway car, the police only notice it close
+// by) and a new bus starts somewhere else. Carry set if he did.
+try_bus:
+    lda n_type + BUS_SLOT
+    cmp #NT_CAB
+    bne tb_no
+    lda bus_t
+    beq tb_no
+    ldx #BUS_SLOT
+    jsr set_target                  // (tgt = Vinnie)
+    jsr npc_delta
+    lda #18                         // 18 across, 27 along it
+    jsr npc_near
+    bcs !+
+tb_no:
+    clc
+    rts
+!:  ldy n_dir,x                     // his vehicle stands on the centre line
+    lda n_xl,x                      // where the bus is (its lane may have
+    sta car_xl                      // parked cars)
+    lda n_xh,x
+    sta car_xh
+    lda n_yl,x
+    sta car_yl
+    lda n_yh,x
+    sta car_yh
+    lda #BUS_COL
+    sta car_col
+    lda #1
+    sta is_bus
+    tya                             // its heading: direction x 64
+    clc
+    ror
+    ror
+    ror
+    pha
+    jsr spawn_cab                   // (x = BUS_SLOT) the next bus
+    pla
+    jmp ts_take
 
 // ---------------------------------------------------------------- the arrow
 // where the arrow, the marker and the map ring point (x = door_xl/...
