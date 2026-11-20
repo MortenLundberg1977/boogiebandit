@@ -75,7 +75,10 @@ the standard one.
 - Three hearts, then game over. The best five bandits make the table on the
   title screen, with the whole gang dancing under it.
 - Watch out for the yellow cabs, and the city bus: it stops at every bus stop
-  (the signs along the avenues) for two seconds.
+  (the signs along the avenues) for two seconds. While it waits there you can
+  hijack it: walk up to it and press fire. It is slower than a car, but it
+  is not the getaway car.
+- On foot you can't walk through cars, cabs or the bus.
 
 ## Controls (joystick in port 2)
 

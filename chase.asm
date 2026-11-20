@@ -2635,30 +2635,59 @@ sound_frame:
     rts
 !:  lda state
     cmp #ST_DRIVE
-    bne sf_engoff
+    beq !+
+    jmp sf_engoff
+!:
     lda #1
     sta v2_own
-    jsr abs_speed
-    lda t0                          // f = $0400 + 3 x |speed| (+ revs)
-    asl
-    sta t2
-    lda t1
-    rol
-    sta t3
-    lda t2
-    clc
-    adc t0
-    sta t2
-    lda t3
-    adc t1
-    sta t3
-    lda burn
+    jsr abs_speed                   // t1/t0 = |speed| (0-$300)
+    lda burn                        // a burnout: revved up high
     beq !+
-    lda t3
-    clc
-    adc #3
+    lda #$b0
+    sta t0
+!:  lda t1
+    bne se_gear
+    lda t0
+    cmp #$0c
+    bcs se_gear
+    lda vbl                         // standing: a low, lumpy idle (a chug
+    and #7                          // every 8 frames)
+    tax
+    lda #$80
+    sta $d407
+    lda idle_f,x
+    sta $d408
+    lda idle_pw,x
+    bne se_set                      // (always)
+se_gear:
+    ldx #0                          // four gears, $c4 of speed each: the
+!:  lda t0                          // revs climb in a gear and drop when
+    sec                             // it shifts up
+    sbc #$c4
+    tay
+    lda t1
+    sbc #0
+    bcc !+
+    sta t1
+    sty t0
+    inx
+    bne !-
+!:  lda #0                          // f = $0480 + 8 x the speed in the gear
+    sta t3                          // + $100 x the gear
+    lda t0
+    asl
+    rol t3
+    asl
+    rol t3
+    asl
+    rol t3
+    adc #$80
+    sta t2
+    txa
+    adc t3
+    adc #4
     sta t3
-!:  lda vbl                         // a little rumble
+    lda vbl                         // a little rumble
     and #3
     asl
     asl
@@ -2667,13 +2696,14 @@ sound_frame:
     adc t2
     sta $d407
     lda t3
-    adc #4
+    adc #0
     sta $d408
+    lda #3
+se_set:
+    sta $d40a                       // pulse width (high)
     lda #0
     sta $d409
     sta $d40c
-    lda #3
-    sta $d40a
     lda #$90
     sta $d40d
     lda #$41
@@ -2724,6 +2754,10 @@ sf_siroff:
     lda #0
     sta v1_own
 !:  rts
+
+// the idle: frequency (high byte) and pulse width over 8 frames, a chug
+idle_f:     .byte 3, 3, 2, 2, 2, 2, 2, 2
+idle_pw:    .byte 7, 6, 2, 2, 2, 2, 2, 2
 
 sound_off:
     lda #0

@@ -182,7 +182,29 @@ when its centre is at y mod 128 = `BUS_Y` on an avenue (`ns_node` in
 counted down in `no_move`). Test: slot 3's `n_xl`/`n_xh`/`n_yl`/`n_yh`/`n_dir`
 are $3a9/$3ae/$3b3/$3b8/$3bd (check `build\boogie.sym`); poke $3a5 (slot 4's
 `n_type`) 0 to take the yellow cab away. Pokes right after the game starts
-can be lost (wait 4 s).
+can be lost (wait 4 s); pokes into the slots need the emulator stopped
+between them: `raw > 3a9 80; raw > 3ae 02; ...; raw x` (vice.ps1's `poke`
+lets the game run between commands).
+
+Hijacking the bus (2.12.0): on foot, fire next to the bus while it stands
+at a stop (`bus_t` not 0; within 18 across, 27 along it): `try_bus` (chase.asm,
+tried before `try_steal`) puts his vehicle on the bus's centre line (its lane
+may hold parked cars), facing its way, `is_bus` = 1, `car_col` = `BUS_COL`,
+and goes on through `ts_take` (the end of `try_steal`: not the getaway car,
+`steal_seen`); `spawn_cab` starts the next bus. His bus is drawn with the bus
+sprites (direction from `car_frame`, expanded, in `place_sprites`), has the
+car's box and physics with a top speed of `BUS_MAX` (2; `max_spd` in
+`dd_acc`); `is_bus` is 0 again with any other car and at a new game. While
+the bus waits at a stop and something touches it, it just waits (no horn,
+no turning around; `nc_wait`).
+
+Walking into vehicles (2.12.0): `man_try_x`/`man_try_y` use `man_box`:
+`box_blocked`, then `veh_test` (carry: `tgt` is inside a vehicle: police
+cars, the roadblock, cabs, the bus via `npc_delta`, 13 along / 10 across,
+the bus and the roadblock 25 along; his own car or bus from `car_frame`). A
+step is blocked only if it goes into a vehicle he is not already in (so he
+can always get out of one; the crash flight starts inside his car).
+`man_box` keeps `t3` (`npc_delta` uses it).
 
 Keys: SPACE city map (fire or SPACE back), M music on/off, D raster time bar,
 A what the arrow points to.
@@ -191,8 +213,11 @@ Walls: the car moves x and y separately against a square box (`bhw` 6). If
 only one way is blocked and it is not the way the car mainly goes, it
 scrapes along (speed - speed / 32 a frame); head on (or both blocked) it
 bounces back at a quarter of its speed (`dd_bumped`).
-Sound: the tune on 3 voices; while driving voice 2 is the engine (pitch from
-the speed), during a chase voice 1 is the siren; effects on voice 3 (pow,
+Sound: the tune on 3 voices; while driving voice 2 is the engine (2.12.0,
+`sound_frame`: a pulse wave; standing, a low lumpy idle, a chug every 8
+frames from `idle_f`/`idle_pw`; moving, four gears of $c4 of speed each:
+f = $0480 + 8 x the speed in the gear + $100 x the gear, so the revs climb
+and drop at each shift; a burnout revs high), during a chase voice 1 is the siren; effects on voice 3 (pow,
 crash, ching, door, two cab horns, gunshot, spray hiss, and a footstep every
 8 frames while walking, only when no other effect is playing).
 
@@ -375,7 +400,7 @@ into characters and de-duplicated.
 - `$0400-$06ff` the 12 extra police car sprites (copied to `$f800` by
   `gen_shift_ba`, i.e. every time the city comes back from a bitmap screen),
   `$0700-$07ff` the chase tune (both copied there from the start-up data).
-- `$0801-$7fxx` program + data (must stay below $8000; about 540 bytes free since 2.11.0, 14 fewer in the REU edition: check "Program ends" in the build output; about 15 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`, `abs_speed`; big tables only used once the game runs belong in the tail, see below). After it
+- `$0801-$7fxx` program + data (must stay below $8000; about 100 bytes free since 2.12.0, 14 fewer in the REU edition: check "Program ends" in the build output; about 15 bytes of the `.align 64` padding before `wall_row` are left for small tables or routines, e.g. `last_life`, `abs_speed`; big tables only used once the game runs belong in the tail, see below). After it
   the packed charset and sprites (only needed at start-up, may reach past
   $8000: they are unpacked before the map is).
 - `$8000-$bfff` the city (see "The city"): `BLOCKS` the 23 block designs
