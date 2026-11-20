@@ -79,6 +79,8 @@
 .const GL_BR = GL_BL + glBL.size()
 .const GREET_GLY = GL_BR + glBR.size()  // the greeting font: 14 letters, 7 rows each
 .const DANCE_SPR = $c400            // (screen B, unused on the title pages): sprites 16-19
+.const KSAVE = $c500                // disk_io: the game's zero page $80-$ff meanwhile ($c580-$c5ff, screen B)
+.const DISK_CODE = $0180            // dk_name, read_f1, title_f1, hs_save (page 1, copied there by k_snap; the REU edition has its code below)
 .const D018_A = $04             // screen $c000, chars $d000
 .const D018_B = $14             // screen $c400, chars $d000
 .const IRQ_LINE = 250
@@ -245,6 +247,8 @@
 .label bub_col = zalloc(1)
 .label bub_word = zalloc(1)
 .label score = zalloc(3)        // BCD, lowest byte first
+.label lives = zalloc(1)        // (score, lives, level in a row: the saved game, sv_blk)
+.label level = zalloc(1)        // 1, 2, ... (one more for each delivery)
 .label score_dirty = zalloc(1)
 .label sh_d018 = zalloc(1)
 .label sh_d016 = zalloc(1)
@@ -294,8 +298,7 @@
 .label lv_msb = zalloc(1)        // sprite registers the IRQ hands to the VIC
 .label lv_en = zalloc(1)
 .label pstate = zalloc(1)        // state, or the one before a message
-.label key_map = zalloc(1)       // SPACE was pressed: the city map
-.label lives = zalloc(1)
+.label key_map = zalloc(1)       // SPACE ($20) or F1 ($40, save) was pressed: the city map
 .label wanted = zalloc(1)        // stars = police cars after the next job
 .label chase = zalloc(1)
 .label job_time = zalloc(1)      // BCD seconds left for this job
@@ -457,7 +460,6 @@
 .label hot = balloc(1)             // 1: the car is the getaway car of the last job
 .label carry_l = balloc(1)         // loot not yet at the friend's house (BCD: hundreds,
 .label carry_h = balloc(1)         // ten thousands)
-.label level = balloc(1)           // 1, 2, ... (one more for each delivery)
 .label safe_in = balloc(1)         // 1 while the car stands in the friend's driveway
 .label paint_lock = balloc(1)      // 1 after a paint job until the car leaves the booth
 .label arrow_mode = balloc(1)      // the arrow points to: 0 the next job, 1 the friend's house, 2 a paint garage
@@ -497,6 +499,9 @@
 .label bus_t = b2alloc(1)           // the bus: frames it still stands at its stop
 .label bus_d = b2alloc(1)           // (place_npcs: the direction it is shown in)
 .label rowc = b2alloc(25)           // colour RAM value of each screen row
+.label kvec = b2alloc(33)          // the KERNAL vectors $0314-$0333 at start-up and the device (disk_io)
+.const DISK2_N = 33
+.label DISK2 = b2alloc(DISK2_N)     // dk_swap and the file name (copied there by k_snap)
 .errorif bss2 > $0300, "the second array area is full"
 .errorif bss > $0400, "arrays full"
 
@@ -509,6 +514,7 @@ start:
     cld
     ldx #$ff
     txs
+    jsr k_snap                      // the KERNAL's disk vectors, disk_io to DISK_CODE
     lda #$35
     sta $01
 #if REU
@@ -672,6 +678,8 @@ start:
     lda #$ff
     sta $d019
     cli
+    lda #0                          // the high scores and the saved game
+    jsr disk_io                     // from the disk (if there is one)
     jmp title
 
 nmi:
@@ -1041,6 +1049,8 @@ read_input:
     and #$04
     ora t0
     sta t0
+    jsr read_f1                     // F1 = save (the city map, then saved)
+    sta t0
     lda #$7f                        // SPACE = the city map
     sta $dc00
     lda $dc01
@@ -1048,7 +1058,7 @@ read_input:
     and #$10
     asl
     ora t0
-    ora key_ovr                     // test hook: $20 SPACE, $10 M, $04 D, $02 A
+    ora key_ovr                     // test hook: $40 F1, $20 SPACE, $10 M, $04 D, $02 A
     sta t0
     lda keys_prev
     eor #$ff
@@ -1057,7 +1067,7 @@ read_input:
     lda t0
     sta keys_prev
     txa
-    and #$20
+    and #$60
     sta key_map
     txa
     and #$10
@@ -1110,6 +1120,7 @@ game_over:
     jsr sound_off
     jsr wait_frame
     jsr hiscore_entry
+    jsr hs_save                     // a new high score: to the disk
     lda #1
 title_go:
     sta page
@@ -1219,6 +1230,7 @@ tl_blink:
     sta page
     jsr show_page
 !:  jsr read_input
+    jsr title_f1                    // F1: the saved game (if there is one)
     lda joy_new
     and #$10
     beq title_loop
@@ -1441,6 +1453,7 @@ game_start:
     lda #3
     sta lives
     sta hud_dirty
+    jsr cont_apply                  // F1 on the title: the saved game's score, lives, level
     lda #JOB_TIME
     sta job_start
     sta job_time
@@ -4920,10 +4933,165 @@ guard_rle:  .fill guardPacked.size(), guardPacked.get(i)
 park_chars: .fill 30, carKinds.get(floor(i / 6)).get(floor(mod(i, 6) / 2)).get(mod(i, 2))
 kind6:      .byte 0, 6, 12, 18, 24
 kind_col:   .byte $ff, 1, 0, 0, 15  // stolen cab ($ff: its band's colour), white car, black cars, grey car
+
+// ---------------------------------------------------------------- saving
+// F1 while driving or walking opens the city map and saves the high scores
+// and the game (score, lives, level: sv_blk) to the disk as BOOGIE SAVE; F1
+// on the title pages continues that game. disk_io (at DISK_CODE) does the
+// disk work with the KERNAL.
+
+// (read_f1, title_f1, hs_save and disk_io: DISK_CODE)
+// game_start: the saved game's score, lives and level
+cont_apply:
+    lda sv_go
+    beq !++
+    ldx #4
+!:  lda sv_blk,x
+    sta score,x
+    dex
+    bpl !-
+    inx
+    stx sv_go
+!:  rts
+// the city map, opened with F1: save, and say so
+map_save:
+    lda key_map
+    and #$40
+    beq !++
+    ldx #4
+!:  lda score,x
+    sta sv_blk,x
+    dex
+    bpl !-
+    lda #1
+    jsr disk_io
+    bcs ms_not
+    Print(1, 0, 2, "GAME SAVED")
+!:  rts
+ms_not:
+    Print(1, 0, 2, "NOT SAVED")
+    rts
+// the score page: say that F1 continues the saved game
+sc_hint:
+    lda sv_blk + 4
+    beq !+
+    Print(8, 0, 1, "F1 CONTINUES SAVED GAME")
+!:  jmp bm_show
+// disk_io's save: scratch S0:BOOGIE SAVE, save hs_names to sv_end
+dk_save:
+    lda #14
+    ldx #<dk_scr
+    ldy #>dk_scr
+    jsr $ffbd
+    lda #15
+    tay
+    ldx kvec + 32
+    jsr $ffba
+    jsr $ffc0
+    lda #15
+    jsr $ffc3
+    jsr dk_name
+    lda #<hs_names
+    sta $fb
+    lda #>hs_names
+    sta $fc
+    lda #$fb
+    ldx #<sv_end
+    ldy #>sv_end
+    jsr $ffd8
+    jmp dk_done
 tail_end:
 }
 
 .print "Tables moved out of the program: " + (tail_end - tail_start) + " bytes"
+
+// the KERNAL's vectors $0314-$0333 (with the hooks of a cartridge's disk
+// emulation, e.g. the Kung Fu Flash) and the device the game came from are
+// kept in kvec; disk_io goes to DISK_CODE, the bottom of the stack page
+// (only needed at start-up)
+k_snap:
+    ldx #31
+!:  lda $0314,x
+    sta kvec,x
+    dex
+    bpl !-
+    lda $ba
+    cmp #8
+    bcs !+
+    lda #8
+!:  sta kvec + 32
+    ldx #0
+!:  lda disk_src,x
+    sta DISK_CODE,x
+    inx
+    cpx #disk_end - dk_name
+    bne !-
+    ldx #disk2_end - dk_swap - 1
+!:  lda disk2_src,x
+    sta DISK2,x
+    dex
+    bpl !-
+    rts
+
+disk_src:
+.pseudopc DISK_CODE {
+dk_name:                            // BOOGIE SAVE, file 1, the device
+    lda #11
+    ldx #<dk_scr + 3
+    ldy #>dk_scr + 3
+    jsr $ffbd
+    lda #1
+    ldx kvec + 32
+    ldy #0
+    jmp $ffba
+// a = t0 or $40 if F1 is down (read_input)
+read_f1:
+    lda #$fe
+    sta $dc00
+    lda $dc01
+    eor #$ff
+    and #$10
+    asl
+    asl
+    ora t0
+    rts
+// the title: F1 starts the saved game, if there is one
+title_f1:
+    lda key_map
+    and #$40
+    beq !+
+    lda sv_blk + 4
+    beq !+
+    sta sv_go
+    jmp game_start
+!:  rts
+// game over: a new high score goes to the disk
+hs_save:
+    lda hs_pos
+    bmi !+
+    lda #1
+    jmp disk_io
+!:  rts
+disk_end:
+}
+.print "Page 1 disk code: $" + toHexString(DISK_CODE) + "-$" + toHexString(disk_end - 1)
+.errorif disk_end > $01c0, "the page 1 disk code must leave the stack from $01c0 free"
+disk2_src:
+.pseudopc DISK2 {
+dk_swap:                            // the vectors at $0314 <-> kvec
+    ldx #31
+!:  lda $0314,x
+    ldy kvec,x
+    sta kvec,x
+    tya
+    sta $0314,x
+    dex
+    bpl !-
+    rts
+dk_scr:     .byte $53, $30, $3a, $42, $4f, $4f, $47, $49, $45, $20, $53, $41, $56, $45   // S0:BOOGIE SAVE (PETSCII)
+disk2_end:
+}
+.errorif disk2_end - DISK2 > DISK2_N, "DISK2 needs " + (disk2_end - DISK2) + " bytes"
 
 .errorif tail_end - tail_start > intro_bitmap - TAIL, "the moved tables do not fit after the A->B shift"
 .errorif tail_end - tail_start <= (TAIL_PAGES - 1) * 256 || tail_end - tail_start > TAIL_PAGES * 256, "set TAIL_PAGES to " + ceil((tail_end - tail_start) / 256)
@@ -5600,6 +5768,7 @@ p1_end:
 }
 .errorif p1_news != REU_NEWS, "REU_NEWS must be p1_news"
 .errorif p1_end - p1_title > 128, "the page 1 code is too long"
+.errorif p1_end > DISK_CODE, "the page 1 code runs into DISK_CODE"
 .print "Page 1 code: $0100-$" + toHexString(p1_end - 1)
 // run once at start (before anything is unpacked over this): is there an
 // REU? then the extras go into it

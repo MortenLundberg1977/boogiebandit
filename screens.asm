@@ -22,20 +22,12 @@
 }
 
 // print a text: column, row, colour (1, 2 or 3 = the bitmap colour codes)
+// (pr_in reads them and the text from after the jsr)
 .macro Print(col, row, colour, s) {
-    lda #<str
-    sta zsrc
-    lda #>str
-    sta zsrc + 1
-    lda #colour
-    sta bm_col
-    ldx #col
-    ldy #row
-    jsr bm_text
-    jmp over
-str: .fill s.size(), glyphOf(s.charAt(i))
+    jsr pr_in
+    .byte col, row, colour
+    .fill s.size(), glyphOf(s.charAt(i))
     .byte $ff
-over:
 }
 
 // glyph a at column x, row y in colour bm_col (x and y are kept)
@@ -103,6 +95,91 @@ bt_loop:
     inc tx_i
     jmp bt_loop
 bt_done:
+    rts
+
+// Print: jsr pr_in, then column, row, colour, the text and $ff; carries on
+// after the $ff
+pr_in:
+    pla
+    sta zsrc
+    pla
+    sta zsrc + 1
+    ldy #2
+    lda (zsrc),y                    // the row
+    pha
+    dey
+    lda (zsrc),y                    // the column
+    tax
+    ldy #3
+    lda (zsrc),y
+    sta bm_col
+    lda zsrc
+    clc
+    adc #4
+    sta zsrc
+    bcc !+
+    inc zsrc + 1
+!:  pla
+    tay
+    jsr bm_text
+    lda zsrc                        // back to the $ff (rts adds one)
+    clc
+    adc tx_i
+    tax
+    lda zsrc + 1
+    adc #0
+    pha
+    txa
+    pha
+    rts
+
+// disk_io: a = 0: load BOOGIE SAVE to hs_names (high scores and the saved
+// game), else save it there (the old file scratched first). Carry set: no
+// disk or an error. Only on bitmap pages (screen B holds the zero page
+// meanwhile). The game's zero page $80-$ff and the vectors at $0314 are
+// swapped out for the KERNAL's; the raster interrupt is off.
+disk_io:
+    pha
+    jsr sound_off
+    sei
+    lda #0
+    sta $d01a
+    ldx #$80
+!:  lda $00,x
+    sta KSAVE,x
+    lda #0
+    sta $00,x
+    inx
+    bne !-
+    jsr dk_swap
+    lda #$36                        // the KERNAL in, BASIC out
+    sta $01
+    pla
+    beq dk_load
+    jmp dk_save                     // (in the tail; back to dk_done)
+dk_load:
+    jsr dk_name
+    lda #0
+    ldx #<hs_names
+    ldy #>hs_names
+    jsr $ffd5
+dk_done:
+    php
+    sei
+    lda #$35
+    sta $01
+    jsr dk_swap
+    ldx #$80
+!:  lda KSAVE,x
+    sta $00,x
+    inx
+    bne !-
+    lda #$ff                        // (the CIA interrupts stay off)
+    sta $d019
+    lda #1
+    sta $d01a
+    plp
+    cli
     rts
 
 // six BCD digits from bcd (lowest byte first) at column x, row y; leading
@@ -292,7 +369,7 @@ ss_loop:
     lda hs_i
     cmp #5
     bne ss_loop
-    jmp bm_show
+    jmp sc_hint                     // (F1 continues a saved game) and shown
 
 // ---------------------------------------------------------------- high scores
 // a = place (0-4) the score gets, or $ff
@@ -493,6 +570,9 @@ hs_names:   .fill 15, glyphOf("DEESALVICJOEACE".charAt(i))
 hs_s0:      .byte $00, $00, $00, $00, $00
 hs_s1:      .byte $00, $50, $00, $50, $25
 hs_s2:      .byte $02, $01, $01, $00, $00
+sv_blk:     .fill 5, 0              // the saved game: score (3), lives, level (0: none)
+sv_end:                             // (hs_names up to here is the file BOOGIE SAVE)
+sv_go:      .byte 0                 // 1: game_start continues the saved game
 
 // ---------------------------------------------------------------- the city map
 // 128 x 128 map characters -> 64 x 128 multicolor pixels (two characters
@@ -563,7 +643,7 @@ sm_crow:                            // the map cells
     jsr mm_render
     jsr mm_banks
     Print(16, 0, 1, "CITY MAP")
-    Print(15, 20, 2, "PRESS FIRE")
+    Print(10, 20, 2, "PRESS FIRE  F1 SAVES")
     // sprites: hi-res dots
     lda #0
     sta $d01c
@@ -642,6 +722,7 @@ sm_next:
     cpx #NNPC
     bne sm_npc
     jsr bm_show
+    jsr map_save                    // (F1: the game to the disk)
 sm_loop:
     jsr wait_frame
     lda vbl                         // the player blinks, the police flash
