@@ -9,8 +9,7 @@ arrow points to (KAPOW! ZOWIE! KACHING!), shake off the police, change cars or
 get a new paint job, and bring the loot to your friend's house in the suburb.
 
 **Download:** [boogiebandit.d64](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogiebandit.d64)
-(disk image, `LOAD"BOOGIE",8` then `RUN`),
-[boogiebandit.t64](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogiebandit.t64) (tape image) or
+(disk image, `LOAD"BOOGIE",8` then `RUN`) or
 [boogie.prg](https://github.com/MortenLundberg1977/boogiebandit/releases/latest/download/boogie.prg),
 the latest version; older ones on the [Releases](https://github.com/MortenLundberg1977/boogiebandit/releases) page.
 
@@ -113,9 +112,8 @@ VICE (`x64sc`, `c1541` on `PATH`).
 build.bat run
 ```
 
-builds `build\boogie.prg`, a disk image `build\boogiebandit.d64` and a tape
-image `build\boogiebandit.t64` (the same program, for loaders and emulators
-that take .t64), and starts VICE. On a real C64 from the disk:
+builds `build\boogie.prg` and a disk image `build\boogiebandit.d64`, and
+starts VICE. On a real C64 from the disk:
 `LOAD"BOOGIE",8` then `RUN`.
 
 With a Kung Fu Flash cartridge on USB, every `build.bat` also sends the game

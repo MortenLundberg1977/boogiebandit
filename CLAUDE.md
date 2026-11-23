@@ -327,9 +327,8 @@ the top of boogie.asm):
 - `build.bat [pull [branch]] [run|send|nosend|reu|sendreu]` (`reu`/`sendreu`:
   send the REU edition instead) → `build\boogie.prg`, `build\boogie-reu.prg`, `build\boogiebandit.d64`
   (file `boogie`, lowercase: uppercase becomes shifted PETSCII). One file, loads
-  at $0801, `LOAD"BOOGIE",8` + `RUN` on a real C64. Also
-  `build\boogiebandit.t64` (tape image, written by `tools\make_t64.ps1`; the
-  name inside is `BOOGIE` in capitals, as PETSCII).
+  at $0801, `LOAD"BOOGIE",8` + `RUN` on a real C64. No tape image (.t64); the owner
+  dropped it.
 - Every `build.bat` also sends `build\boogie.prg` to a Kung Fu Flash cartridge
   on USB, if one is found, with `..\tools\ef3utils\ef3usb.exe` (`EF3USB_EXE`),
   and the C64 starts it. The cartridge only takes it while its menu is on
@@ -585,7 +584,7 @@ officer shooting and a roadblock ≈ $83.
 - Work on a branch, test in VICE (screenshots), merge into `main` and push.
   Commit as `Morten Lundberg` with the Claude co-author line.
 - Keep 50 fps: check `fps_val` and `perf_max` after changing the main loop.
-- Every version merged into main gets a GitHub release with the .d64, .t64
+- Every version merged into main gets a GitHub release with the .d64
   and .prg (the README links to the latest): bump `version.asm`, push main,
   then `powershell -ExecutionPolicy Bypass -File tools/release.ps1` (builds,
   tags `v<version>` if needed, creates the release or replaces its files).
